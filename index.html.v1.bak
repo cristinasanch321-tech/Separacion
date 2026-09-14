@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Separación</title>
+<style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #1e1e20; color: #eee; padding: 14px; margin: 0; }
+    h3 { text-align: center; font-size: 14px; margin: 0 0 12px; color: #ddd; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .big { background: #2a2b2e; border: 1px solid #3a3b3e; border-radius: 12px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+    .big:hover { background: #33343a; }
+    .big .icon { font-size: 30px; color: #bbb; }
+    .big .lbl { font-size: 11px; color: #9aa; margin-top: 6px; font-weight: bold; }
+    #status { margin-top: 12px; font-size: 10px; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 130px; overflow-y: auto; }
+    /* settings */
+    #settings { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; overflow-y: auto; padding: 16px; box-sizing: border-box; }
+    #settings.open { display: block; }
+    .swin { background: #26272b; border: 1px solid #444; border-radius: 10px; padding: 14px; max-width: 380px; margin: 0 auto; }
+    .swin h4 { margin: 0 0 10px; font-size: 13px; text-align: center; color: #eee; }
+    label { display: block; font-size: 10px; color: #9aa; font-weight: bold; margin: 10px 0 4px; text-transform: uppercase; }
+    select, input[type="number"] { width: 100%; background: #17181b; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 6px; box-sizing: border-box; font-size: 11px; }
+    .chk { display: flex; align-items: center; gap: 6px; color: #ccc; margin: 8px 0; font-size: 11px; }
+    .chk input { width: auto; }
+    .sbtns { display: flex; gap: 8px; margin-top: 14px; }
+    .sbtns button { flex: 1; padding: 9px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: #fff; }
+    #stOk { background: #34c759; }
+    #stCancel { background: #555; }
+</style>
+</head>
+<body>
+    <h3>Separación</h3>
+    <div class="grid">
+        <div class="big" id="btnSpread" title="Un clip por pista + alinear">
+            <div class="icon">⏫</div>
+            <div class="lbl">SPREAD</div>
+        </div>
+        <div class="big" id="btnRestck" title="Reconstruir en cascada">
+            <div class="icon">⏬</div>
+            <div class="lbl">RE-STACK</div>
+        </div>
+    </div>
+    <div id="status">Comprobando Premiere...</div>
+
+    <div id="settings">
+        <div class="swin">
+            <h4>⚙️ Settings</h4>
+            <label>Al abrir diálogo de sync, preseleccionar</label>
+            <select id="stSyncMode">
+                <option value="audio1" selected>Audio track channel 1</option>
+                <option value="start">Clip Start</option>
+                <option value="end">Clip End</option>
+                <option value="tc">Timecode</option>
+            </select>
+            <label>Pista de referencia para alinear</label>
+            <select id="stRefTrack">
+                <option value="0" selected>Pista 1 (V1)</option>
+            </select>
+            <div class="chk"><input type="checkbox" id="stKeepAudio"> Mantener audio de cámara en cada pista (si no, solo V1)</div>
+            <div class="chk"><input type="checkbox" id="stLink" checked> Vincular A/V tras re-stack</div>
+            <div class="chk"><input type="checkbox" id="stBackup" checked> Backup automático (clon [BACKUP]) antes de cada operación</div>
+            <div class="sbtns">
+                <button id="stCancel">Cancelar</button>
+                <button id="stOk">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="./js/CSInterface.js"></script>
+    <script>
+        const csInterface = new CSInterface();
+        const statusEl = document.getElementById('status');
+        let SETTINGS = { syncMode: 'audio1', refTrack: 0, keepAudio: true, link: true, backup: true };
+
+        csInterface.evalScript('SP_ping()', (res) => {
+            try {
+                const r = JSON.parse(res);
+                statusEl.innerText = r.ok ? `"${r.seq}" · ${r.videoTracks}V / ${r.audioTracks}A`
+                                          : `Premiere: ${r.error}`;
+            } catch (e) { statusEl.innerText = 'JSX no cargado. Reinicia Premiere. ' + res; }
+        });
+
+        function withBackup(next) {
+            if (!SETTINGS.backup) return next();
+            statusEl.innerText = 'Creando backup [BACKUP]...';
+            csInterface.evalScript('SP_backup()', (res) => {
+                let r = null; try { r = JSON.parse(res); } catch (e) {}
+                if (r && r.ok) { statusEl.innerText = '✔ Backup: "' + r.name + '"'; setTimeout(next, 250); }
+                else { statusEl.innerText = '⚠️ Backup falló: ' + (r ? r.error : res) + ' — operación cancelada.'; }
+            });
+        }
+
+        document.getElementById('btnSpread').addEventListener('click', () => {
+            statusEl.innerText = 'Leyendo selección...';
+            csInterface.evalScript('SP_readSel()', (res) => {
+                let r = null; try { r = JSON.parse(res); } catch (e) {}
+                if (!r || !r.ok) { statusEl.innerText = 'Error: ' + (r ? r.error : res); return; }
+                statusEl.innerText = `${r.count} clips (${r.source}). `;
+                if (r.count < 2) { statusEl.innerText += 'Necesito 2+ clips seleccionados para separar.'; return; }
+                withBackup(() => {
+                    statusEl.innerText += 'Separando en pistas...';
+                    csInterface.evalScript('SP_spread()', (res2) => {
+                        let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
+                        if (r2 && r2.ok) {
+                            statusEl.innerText = `✔ Spread: ${r2.spread} clips en pistas propias.\n` +
+                                'AHORA: selecciona todos los clips (Cmd+A) y usa Clip > Synchronize > Audio (Premiere no permite abrir ese diálogo por script). Cuando estén sincronizados, vuelve y pulsa RE-STACK.';
+                        } else statusEl.innerText = 'Spread falló:\n' + (r2 ? r2.errors.join('\n') : res2);
+                    });
+                });
+            });
+        });
+
+        document.getElementById('btnRestck').addEventListener('click', () => {
+            withBackup(() => {
+                statusEl.innerText = 'Reconstruyendo en cascada...';
+                csInterface.evalScript('SP_restck()', (res) => {
+                    let r = null; try { r = JSON.parse(res); } catch (e) {}
+                    if (r && r.ok) statusEl.innerText = `✔ Re-stack: ${r.stacked} clips colocados en cascada.`;
+                    else statusEl.innerText = 'Re-stack falló:\n' + (r ? r.errors.join('\n') : res);
+                });
+            });
+        });
+
+        // ---- settings con clic derecho ----
+        const stWin = document.getElementById('settings');
+        document.body.addEventListener('contextmenu', (e) => { e.preventDefault(); stWin.classList.add('open'); });
+        document.getElementById('stCancel').addEventListener('click', () => stWin.classList.remove('open'));
+        document.getElementById('stOk').addEventListener('click', () => {
+            SETTINGS = {
+                syncMode: document.getElementById('stSyncMode').value,
+                refTrack: parseInt(document.getElementById('stRefTrack').value, 10),
+                keepAudio: document.getElementById('stKeepAudio').checked,
+                link: document.getElementById('stLink').checked,
+                backup: document.getElementById('stBackup').checked
+            };
+            localStorage.setItem('separacion_settings', JSON.stringify(SETTINGS));
+            stWin.classList.remove('open');
+            statusEl.innerText = 'Settings guardados.';
+        });
+        try {
+            const s = localStorage.getItem('separacion_settings');
+            if (s) SETTINGS = Object.assign(SETTINGS, JSON.parse(s));
+        } catch (e) {}
+    </script>
+</body>
+</html>

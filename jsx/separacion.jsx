@@ -222,28 +222,3 @@ function SP_backup() {
         return J({ ok: true, name: cl.name });
     } catch (e) { return J({ ok: false, error: String(e) }); }
 }
-
-/* selecciona TODOS los clips de todas las pistas de video (para el Synchronize nativo) */
-function SP_prepareSync() {
-    var res = { ok: false, selected: 0, audioTracks: 0 };
-    try {
-        var seq = app.project ? app.project.activeSequence : null;
-        if (!seq) { res.error = "No hay secuencia activa"; return J(res); }
-        res.ok = true;
-        for (var t = 0; t < seq.audioTracks.numTracks; t++)
-            if (seq.audioTracks[t].clips.numItems > 0) res.audioTracks++;
-        var first = true;
-        for (var v = 0; v < seq.videoTracks.numTracks; v++) {
-            var tr = seq.videoTracks[v];
-            for (var c = 0; c < tr.clips.numItems; c++) {
-                try {
-                    tr.clips[c].setSelected(true, first);
-                    first = false;
-                    res.selected++;
-                } catch (eSel) {}
-            }
-        }
-        if (!res.selected) res.error = "No hay clips que seleccionar";
-        return J(res);
-    } catch (e) { res.error = e.toString(); return J(res); }
-}

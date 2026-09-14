@@ -4,33 +4,34 @@
 <meta charset="utf-8">
 <title>Separación</title>
 <style>
-    body { font-family: system-ui, -apple-system, sans-serif; background: #1e1e20; color: #eee; padding: 14px; margin: 0; }
+    :root { --panel-bg: #1e1e20; --btn-bg: #2a2b2e; --btn-bg-hover: #33343a; --btn-border: #3a3b3e; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--panel-bg); color: #eee; padding: 14px; margin: 0; }
     h3 { text-align: center; font-size: 14px; margin: 0 0 12px; color: #ddd; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .big { background: #2a2b2e; border: 1px solid #3a3b3e; border-radius: 12px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
-    .big:hover { background: #33343a; }
+    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 12px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+    .big:hover { background: var(--btn-bg-hover); }
+    .big.disabled { opacity: .4; pointer-events: none; }
     .big .icon { font-size: 30px; color: #bbb; }
     .big .lbl { font-size: 11px; color: #9aa; margin-top: 6px; font-weight: bold; }
-    #status { margin-top: 12px; font-size: 10px; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 130px; overflow-y: auto; }
-    /* settings */
+    #status { margin-top: 12px; font-size: 10px; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
+    #status.ok { color: #7ed957; } #status.err { color: #ff6b6b; }
     #settings { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; overflow-y: auto; padding: 16px; box-sizing: border-box; }
     #settings.open { display: block; }
     .swin { background: #26272b; border: 1px solid #444; border-radius: 10px; padding: 14px; max-width: 380px; margin: 0 auto; }
-    .swin h4 { margin: 0 0 10px; font-size: 13px; text-align: center; color: #eee; }
+    .swin h4 { margin: 0 0 10px; font-size: 13px; text-align: center; }
     label { display: block; font-size: 10px; color: #9aa; font-weight: bold; margin: 10px 0 4px; text-transform: uppercase; }
-    select, input[type="number"] { width: 100%; background: #17181b; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 6px; box-sizing: border-box; font-size: 11px; }
+    select { width: 100%; background: #17181b; color: #fff; border: 1px solid #444; padding: 6px; border-radius: 6px; box-sizing: border-box; font-size: 11px; }
     .chk { display: flex; align-items: center; gap: 6px; color: #ccc; margin: 8px 0; font-size: 11px; }
     .chk input { width: auto; }
     .sbtns { display: flex; gap: 8px; margin-top: 14px; }
     .sbtns button { flex: 1; padding: 9px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; color: #fff; }
-    #stOk { background: #34c759; }
-    #stCancel { background: #555; }
+    #stOk { background: #34c759; } #stCancel { background: #555; }
 </style>
 </head>
 <body>
     <h3>Separación</h3>
     <div class="grid">
-        <div class="big" id="btnSpread" title="Un clip por pista + alinear">
+        <div class="big" id="btnSpread" title="Un clip por pista + abre Synchronize">
             <div class="icon">⏫</div>
             <div class="lbl">SPREAD</div>
         </div>
@@ -43,21 +44,9 @@
 
     <div id="settings">
         <div class="swin">
-            <h4>⚙️ Settings</h4>
-            <label>Al abrir diálogo de sync, preseleccionar</label>
-            <select id="stSyncMode">
-                <option value="audio1" selected>Audio track channel 1</option>
-                <option value="start">Clip Start</option>
-                <option value="end">Clip End</option>
-                <option value="tc">Timecode</option>
-            </select>
-            <label>Pista de referencia para alinear</label>
-            <select id="stRefTrack">
-                <option value="0" selected>Pista 1 (V1)</option>
-            </select>
-            <div class="chk"><input type="checkbox" id="stKeepAudio"> Mantener audio de cámara en cada pista (si no, solo V1)</div>
-            <div class="chk"><input type="checkbox" id="stLink" checked> Vincular A/V tras re-stack</div>
+            <h4>⚙️ Settings (clic derecho para abrir)</h4>
             <div class="chk"><input type="checkbox" id="stBackup" checked> Backup automático (clon [BACKUP]) antes de cada operación</div>
+            <div class="chk"><input type="checkbox" id="stAutoSync" checked> Tras Spread: seleccionar todo y abrir Synchronize automáticamente</div>
             <div class="sbtns">
                 <button id="stCancel">Cancelar</button>
                 <button id="stOk">Guardar</button>
@@ -67,78 +56,165 @@
 
     <script src="./js/CSInterface.js"></script>
     <script>
-        const csInterface = new CSInterface();
+        const cs = new CSInterface();
         const statusEl = document.getElementById('status');
-        let SETTINGS = { syncMode: 'audio1', refTrack: 0, keepAudio: true, link: true, backup: true };
+        let SETTINGS = { backup: true, autoSync: true };
+        let busy = false;
 
-        csInterface.evalScript('SP_ping()', (res) => {
+        /* ---- skin adaptativo (paleta del propio Premiere) ---- */
+        (function () {
+            try {
+                const c = cs.getHostEnvironment().appSkinInfo.panelBackgroundColor.color;
+                const cl = x => Math.max(0, Math.min(255, Math.round(x)));
+                const rgb = (r, g, b) => `rgb(${cl(r)},${cl(g)},${cl(b)})`;
+                const s = document.documentElement.style;
+                s.setProperty('--panel-bg', rgb(c.red, c.green, c.blue));
+                s.setProperty('--btn-bg', rgb(c.red + 16, c.green + 16, c.blue + 16));
+                s.setProperty('--btn-bg-hover', rgb(c.red + 30, c.green + 30, c.blue + 30));
+                s.setProperty('--btn-border', rgb(c.red + 16, c.green + 16, c.blue + 16));
+            } catch (e) {}
+        })();
+
+        function setStatus(txt, cls) {
+            statusEl.className = cls || '';
+            statusEl.innerText = txt || '';
+        }
+        function setBusy(b) {
+            busy = b;
+            document.getElementById('btnSpread').classList.toggle('disabled', b);
+            document.getElementById('btnRestck').classList.toggle('disabled', b);
+        }
+
+        cs.evalScript('SP_ping()', (res) => {
             try {
                 const r = JSON.parse(res);
-                statusEl.innerText = r.ok ? `"${r.seq}" · ${r.videoTracks}V / ${r.audioTracks}A`
-                                          : `Premiere: ${r.error}`;
-            } catch (e) { statusEl.innerText = 'JSX no cargado. Reinicia Premiere. ' + res; }
+                setStatus(r.ok ? `"${r.seq}" · ${r.videoTracks}V / ${r.audioTracks}A` : `Premiere: ${r.error}`);
+            } catch (e) { setStatus('JSX no cargado. Reinicia Premiere. ' + res, 'err'); }
         });
 
         function withBackup(next) {
             if (!SETTINGS.backup) return next();
-            statusEl.innerText = 'Creando backup [BACKUP]...';
-            csInterface.evalScript('SP_backup()', (res) => {
+            setStatus('Creando backup [BACKUP]...');
+            cs.evalScript('SP_backup()', (res) => {
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
-                if (r && r.ok) { statusEl.innerText = '✔ Backup: "' + r.name + '"'; setTimeout(next, 250); }
-                else { statusEl.innerText = '⚠️ Backup falló: ' + (r ? r.error : res) + ' — operación cancelada.'; }
+                if (r && r.ok) { setStatus('✔ Backup: "' + r.name + '"'); setTimeout(next, 250); }
+                else setStatus('⚠️ Backup falló: ' + (r ? r.error : res) + ' — operación cancelada.', 'err');
             });
         }
 
+        /* ---- abre el diálogo NATIVO de Synchronize via AppleScript ---- */
+        function invokeSynchronizeMenu(done) {
+            let cp = null;
+            try { cp = require('child_process'); } catch (e) { cp = null; }
+            if (!cp) { done('failed', 'Node no disponible en el panel'); return; }
+            const script = [
+                'tell application "System Events"',
+                '  set procs to every application process whose name starts with "Adobe Premiere Pro"',
+                '  if (count of procs) is not 1 then error "PREMIERE_COUNT|" & (count of procs)',
+                '  tell item 1 of procs',
+                '    set frontmost to true',
+                '    delay 0.3',
+                '    click (first menu item of menu "Clip" of menu bar item "Clip" of menu bar 1 whose name starts with "Synchroni")',
+                '  end tell',
+                '  return "INVOKED"',
+                'end tell'
+            ].join('\n');
+            cp.execFile('/usr/bin/osascript', ['-e', script], { timeout: 12000 }, (err, stdout, stderr) => {
+                const txt = String((stderr || '') + (err && err.message ? '\n' + err.message : ''));
+                if (!err) { done('invoked', txt); return; }
+                if (/-1743|not authorized|no está autorizado/i.test(txt)) done('needs-automation', txt);
+                else if (/assistive/i.test(txt)) done('needs-accessibility', txt);
+                else if (/PREMIERE_COUNT\|0/.test(txt)) done('no-premiere', txt);
+                else if (/PREMIERE_COUNT\|/.test(txt)) done('multi-premiere', txt);
+                else done('failed', txt);
+            });
+        }
+
+        const PERM_HELP = {
+            'needs-automation': 'macOS necesita permiso para controlar Premiere.\n' +
+                '→ Acepta el aviso si aparece, o ve a Ajustes del Sistema > Privacidad y seguridad > Automatización > Adobe Premiere Pro > activa "System Events".\n' +
+                '→ Luego vuelve a pulsar SPREAD.',
+            'needs-accessibility': 'macOS pide permiso de Accesibilidad para clicar menús.\n' +
+                '→ Ajustes del Sistema > Privacidad y seguridad > Accesibilidad > añade/activa "Adobe Premiere Pro".\n' +
+                '→ Reintenta SPREAD.',
+            'no-premiere': 'No encontré Premiere abierto (¿está arrancando?).',
+            'multi-premiere': 'Tienes varias versiones de Premiere abiertas. Cierra todas menos una.',
+            'failed': 'No pude clicar el menú Synchronize. Hazlo a mano: Cmd+A y Clip > Synchronize > Audio.'
+        };
+
         document.getElementById('btnSpread').addEventListener('click', () => {
-            statusEl.innerText = 'Leyendo selección...';
-            csInterface.evalScript('SP_readSel()', (res) => {
+            if (busy) return;
+            setBusy(true);
+            setStatus('Leyendo selección...');
+            cs.evalScript('SP_readSel()', (res) => {
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
-                if (!r || !r.ok) { statusEl.innerText = 'Error: ' + (r ? r.error : res); return; }
-                statusEl.innerText = `${r.count} clips (${r.source}). `;
-                if (r.count < 2) { statusEl.innerText += 'Necesito 2+ clips seleccionados para separar.'; return; }
+                if (!r || !r.ok) { setStatus('Error: ' + (r ? r.error : res), 'err'); setBusy(false); return; }
+                if (r.count < 2) { setStatus('Necesito 2+ clips (seleccionados o en V1).', 'err'); setBusy(false); return; }
                 withBackup(() => {
-                    statusEl.innerText += 'Separando en pistas...';
-                    csInterface.evalScript('SP_spread()', (res2) => {
+                    setStatus(r.count + ' clips. Separando en pistas...');
+                    cs.evalScript('SP_spread()', (res2) => {
                         let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
-                        if (r2 && r2.ok) {
-                            statusEl.innerText = `✔ Spread: ${r2.spread} clips en pistas propias.\n` +
-                                'AHORA: selecciona todos los clips (Cmd+A) y usa Clip > Synchronize > Audio (Premiere no permite abrir ese diálogo por script). Cuando estén sincronizados, vuelve y pulsa RE-STACK.';
-                        } else statusEl.innerText = 'Spread falló:\n' + (r2 ? r2.errors.join('\n') : res2);
+                        if (!r2 || !r2.ok) { setStatus('Spread falló:\n' + (r2 ? r2.errors.join('\n') : res2), 'err'); setBusy(false); return; }
+                        setStatus('✔ Spread: ' + r2.spread + ' clips, uno por pista.');
+                        if (!SETTINGS.autoSync) { setBusy(false); return; }
+                        setTimeout(() => {
+                            setStatus('Seleccionando todos los clips...');
+                            cs.evalScript('SP_prepareSync()', (res3) => {
+                                let r3 = null; try { r3 = JSON.parse(res3); } catch (e) {}
+                                if (!r3 || !r3.ok || !r3.selected) {
+                                    setStatus('Spread OK, pero no pude seleccionar los clips.\nHazlo a mano: Cmd+A y Clip > Synchronize > Audio.', 'err');
+                                    setBusy(false); return;
+                                }
+                                setStatus(r3.selected + ' clips seleccionados. Abriendo Synchronize de Premiere...');
+                                invokeSynchronizeMenu((st, detail) => {
+                                    if (st === 'invoked') {
+                                        setStatus('✔ Diálogo Synchronize abierto.\nElige "Audio" y acepta. Cuando termine, pulsa RE-STACK.');
+                                        setBusy(false);
+                                    } else {
+                                        setStatus((PERM_HELP[st] || PERM_HELP.failed) +
+                                            '\n\nDetalle técnico:\n' + String(detail).slice(-300), 'err');
+                                        setBusy(false);
+                                    }
+                                });
+                            });
+                        }, 400);
                     });
                 });
             });
         });
 
         document.getElementById('btnRestck').addEventListener('click', () => {
+            if (busy) return;
+            setBusy(true);
             withBackup(() => {
-                statusEl.innerText = 'Reconstruyendo en cascada...';
-                csInterface.evalScript('SP_restck()', (res) => {
+                setStatus('Reconstruyendo en cascada...');
+                cs.evalScript('SP_restack()', (res) => {
                     let r = null; try { r = JSON.parse(res); } catch (e) {}
-                    if (r && r.ok) statusEl.innerText = `✔ Re-stack: ${r.stacked} clips colocados en cascada.`;
-                    else statusEl.innerText = 'Re-stack falló:\n' + (r ? r.errors.join('\n') : res);
+                    setBusy(false);
+                    if (r && r.ok) setStatus('✔ Re-stack: ' + r.stacked + ' clips apilados en cascada.', 'ok');
+                    else setStatus('Re-stack falló:\n' + (r ? r.errors.join('\n') : res), 'err');
                 });
             });
         });
 
-        // ---- settings con clic derecho ----
+        /* ---- settings (clic derecho) ---- */
         const stWin = document.getElementById('settings');
         document.body.addEventListener('contextmenu', (e) => { e.preventDefault(); stWin.classList.add('open'); });
         document.getElementById('stCancel').addEventListener('click', () => stWin.classList.remove('open'));
         document.getElementById('stOk').addEventListener('click', () => {
             SETTINGS = {
-                syncMode: document.getElementById('stSyncMode').value,
-                refTrack: parseInt(document.getElementById('stRefTrack').value, 10),
-                keepAudio: document.getElementById('stKeepAudio').checked,
-                link: document.getElementById('stLink').checked,
-                backup: document.getElementById('stBackup').checked
+                backup: document.getElementById('stBackup').checked,
+                autoSync: document.getElementById('stAutoSync').checked
             };
             localStorage.setItem('separacion_settings', JSON.stringify(SETTINGS));
             stWin.classList.remove('open');
-            statusEl.innerText = 'Settings guardados.';
+            setStatus('Settings guardados.');
         });
         try {
             const s = localStorage.getItem('separacion_settings');
             if (s) SETTINGS = Object.assign(SETTINGS, JSON.parse(s));
+            document.getElementById('stBackup').checked = SETTINGS.backup;
+            document.getElementById('stAutoSync').checked = SETTINGS.autoSync;
         } catch (e) {}
     </script>
 </body>
