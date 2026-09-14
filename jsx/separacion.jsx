@@ -158,7 +158,7 @@ function SP_prepareSync() {
 }
 
 /* RE-STACK: agrupa los clips por instante de inicio y los apila en cascada desde V1 */
-function SP_restack() {
+function SP_restack(optsJson) {
     var res = { ok: false, stacked: 0, errors: [] };
     function err(m) { res.errors.push(String(m)); }
     try {
@@ -189,6 +189,9 @@ function SP_restack() {
             var key = Math.round(clips[k].start * 25);
             (byStart[key] = byStart[key] || []).push(k);
         }
+        var opts = null;
+        try { opts = eval("(" + optsJson + ")"); } catch (eO) {}
+        var perDevice = opts && opts.layout === 'perdevice';
         var groups = Object.keys(byStart).map(Number).sort(function (a, b) { return a - b; });
         var slot = 0;
         for (var g = 0; g < groups.length; g++) {
@@ -199,7 +202,8 @@ function SP_restack() {
                 try {
                     it.setInPoint(c.inSec, 4);
                     it.setOutPoint(c.inSec + (c.end - c.start), 4);
-                    seq.videoTracks[slot % seq.videoTracks.numTracks].overwriteClip(it, c.start + zero);
+                    var targetTrack = perDevice ? (c.track || 0) : (slot % seq.videoTracks.numTracks);
+                    seq.videoTracks[targetTrack].overwriteClip(it, c.start + zero);
                     try { it.clearInPoint(4); } catch (e1) {}
                     try { it.clearOutPoint(4); } catch (e2) {}
                     res.stacked++; slot++;
