@@ -1,0 +1,5 @@
+*.bak
+*.bak2
+*.v1.bak
+.DS_Store
+__pycache__/
