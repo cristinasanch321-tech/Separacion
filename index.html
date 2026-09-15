@@ -22,7 +22,7 @@
     .seg button.on.del { color: #ff7b7b; }
     .snote { font-size: 9px; color: #77787c; text-align: center; margin-top: 8px; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
-    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 12px; height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 12px; height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
     .big:hover { background: var(--btn-bg-hover); }
     .big.disabled { opacity: .4; pointer-events: none; }
     .big .icon { font-size: 26px; color: #bbb; }
@@ -37,12 +37,6 @@
         <span class="dots">⋮</span>
         <div class="pop" id="settingsPop">
             <h4>Separación — Settings</h4>
-            <div class="srow">
-                <span class="slbl">Backup sequence</span>
-                <div class="seg" data-key="backup">
-                    <button data-v="on" class="on">On</button><button data-v="off">Off</button>
-                </div>
-            </div>
             <div class="srow">
                 <span class="slbl">Auto-sync tras Spread</span>
                 <div class="seg" data-key="autoSync">
@@ -74,11 +68,9 @@
     <div class="grid">
         <div class="big" id="btnSpread" title="Un clip por pista + abre Synchronize">
             <div class="icon">⏫</div>
-            <div class="lbl">SPREAD</div>
         </div>
         <div class="big" id="btnRestck" title="Reconstruir en cascada">
             <div class="icon">⏬</div>
-            <div class="lbl">RE-STACK</div>
         </div>
     </div>
     <div id="status">Comprobando Premiere...</div>
@@ -145,15 +137,7 @@
             } catch (e) { setStatus('JSX no cargado. Reinicia Premiere. ' + res, 'err'); }
         });
 
-        function withBackup(next) {
-            if (SETTINGS.backup !== 'on') return next();
-            setStatus('Creando backup [BACKUP]...');
-            cs.evalScript('SP_backup()', (res) => {
-                let r = null; try { r = JSON.parse(res); } catch (e) {}
-                if (r && r.ok) { setStatus('✔ Backup: "' + r.name + '"'); setTimeout(next, 250); }
-                else setStatus('⚠️ Backup falló: ' + (r ? r.error : res) + ' — operación cancelada.', 'err');
-            });
-        }
+        function withBackup(next) { next(); }  // backup retirado a petición del usuario
 
         function invokeSynchronizeMenu(done) {
             let cp = null;
