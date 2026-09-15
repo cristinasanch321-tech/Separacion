@@ -110,7 +110,7 @@
         document.getElementById('btnSpread').addEventListener('click', () => {
             if (busy) return;
             setBusy(true);
-            setStatus('Separando...');
+            setStatus('Separando selección...');
             cs.evalScript('SP_spread()', (res) => {
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
                 setBusy(false);
@@ -126,7 +126,7 @@
         document.getElementById('btnRestck').addEventListener('click', () => {
             if (busy) return;
             setBusy(true);
-            setStatus('Re-apilando (' + SETTINGS.layout + ')...');
+            setStatus('Reuniendo selección (' + SETTINGS.layout + ')...');
             cs.evalScript('SP_restack(' + JSON.stringify(JSON.stringify({ layout: SETTINGS.layout })) + ')', (res) => {
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
                 setBusy(false);

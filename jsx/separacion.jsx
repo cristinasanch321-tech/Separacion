@@ -59,15 +59,8 @@ function SP_readSel() {
                     end: cl.end.seconds - res.zeroSec, name: cl.name, inSec: cl.inPoint.seconds, mp: mpOf(cl) });
             }
         }
-        if (!clips.length) {
-            var tr0 = seq.videoTracks[0];
-            for (var c2 = 0; c2 < tr0.clips.numItems; c2++) {
-                var cl2 = tr0.clips[c2];
-                clips.push({ track: 0, start: cl2.start.seconds - res.zeroSec,
-                    end: cl2.end.seconds - res.zeroSec, name: cl2.name, inSec: cl2.inPoint.seconds, mp: mpOf(cl2) });
-            }
-            res.source = "V1 completa";
-        } else res.source = "seleccion";
+        res.source = clips.length ? "seleccion" : "nada";
+        if (!clips.length) res.error = "No hay clips seleccionados. Selecciona los clips que quieras separar/reunir.";
         res.clips = clips;
         res.count = clips.length;
         return J(res);
@@ -210,16 +203,19 @@ function SP_restack(optsJson) {
         try { opts = eval("(" + optsJson + ")"); } catch (eO) {}
         var perDevice = !!(opts && opts.layout === "perdevice");
 
-        // 1) recoger video y audio de todas las pistas
+        // 1) recoger SOLO video seleccionado; audio = sus emparejados
         var vids = [], auds = [], t, c;
         for (t = 0; t < seq.videoTracks.numTracks; t++) {
             var tv = seq.videoTracks[t];
             for (c = 0; c < tv.clips.numItems; c++) {
                 var cv = tv.clips[c];
-                vids.push({ track: t, start: cv.start.seconds, end: cv.end.seconds,
+                var sel = false;
+                try { sel = cv.isSelected(); } catch (eS) {}
+                if (sel) vids.push({ track: t, start: cv.start.seconds, end: cv.end.seconds,
                             inSec: cv.inPoint.seconds, mp: mpOf(cv), name: cv.name, aud: -1 });
             }
         }
+        if (!vids.length) { err("No hay clips de video seleccionados. Selecciona los que quieras reunir."); return J(res); }
         for (t = 0; t < seq.audioTracks.numTracks; t++) {
             var ta = seq.audioTracks[t];
             for (c = 0; c < ta.clips.numItems; c++) {
@@ -228,7 +224,6 @@ function SP_restack(optsJson) {
                             inSec: ca.inPoint.seconds, mp: mpOf(ca), used: false });
             }
         }
-        if (!vids.length) { err("No hay clips de video"); return J(res); }
 
         // 2) emparejar cada audio con el video del mismo media mas cercano en tiempo
         for (var a2 = 0; a2 < auds.length; a2++) {
@@ -261,10 +256,12 @@ function SP_restack(optsJson) {
         for (var v5 = 0; v5 < vids.length; v5++) if (vids[v5].aud >= 0) needA++;
         if (!ensureTracks(seq, needV, needA, res)) { res.ok = false; return J(res); }
 
-        // 5) quitar todo (video completo; audio solo los emparejados — el resto se queda aparcado)
+        // 5) quitar SOLO los implicados (video seleccionado + audio emparejado)
         var srcAll = [];
         for (var v6 = 0; v6 < vids.length; v6++)
             srcAll.push({ mp: vids[v6].mp, start: vids[v6].start - zero });
+        for (var a6 = 0; a6 < auds.length; a6++)
+            if (auds[a6].used) srcAll.push({ mp: auds[a6].mp, start: auds[a6].start - zero });
         removeSources(seq, srcAll, res.errors);
 
         // 6) recolocar: unidad i -> pista i (squashed) o su pista original (perdevice)
