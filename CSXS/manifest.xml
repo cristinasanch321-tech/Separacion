@@ -24,7 +24,7 @@
         <UI>
           <Type>Panel</Type>
           <Menu>Separación</Menu>
-          <Geometry><Size><Height>300</Height><Width>420</Width></Size></Geometry>
+          <Geometry><Size><Height>180</Height><Width>220</Width></Size><MinSize><Height>120</Height><Width>160</Width></MinSize><MaxSize><Height>400</Height><Width>500</Width></MaxSize></Geometry>
         </UI>
       </DispatchInfo>
     </Extension>

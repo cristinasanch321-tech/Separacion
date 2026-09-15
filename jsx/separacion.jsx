@@ -1,6 +1,6 @@
-/* Separación v2 - jsx/separacion.jsx
-   SP_ping · SP_readSel · SP_spread · SP_prepareSync · SP_restack · SP_backup
-   El diálogo Synchronize nativo lo abre el PANEL via osascript (no el JSX). */
+/* Separación v3 - jsx/separacion.jsx (ES3-safe: sin Object.keys, sin map)
+   SP_ping · SP_readSel · SP_spread (video+audio, pistas auto) · SP_restack (video+audio, trim comun)
+   El Synchronize lo hace el usuario a mano: Cmd+A > Clip > Synchronize > Audio. */
 
 function J(o) {
     var t = typeof o, k, i;
@@ -26,18 +26,8 @@ function getZeroSec(seq) {
     } catch (e) { return 0; }
 }
 
-function findProjectItemByMediaPath(mp) {
-    var it = null;
-    (function walk(bin) {
-        if (it) return;
-        var n = bin.children.numItems;
-        for (var i = 0; i < n; i++) {
-            var ch = bin.children[i];
-            if (ch.type === ProjectItemType.BIN) { walk(ch); continue; }
-            try { if (ch.getMediaPath() === mp) { it = ch; return; } } catch (e) {}
-        }
-    })(app.project.rootItem);
-    return it;
+function mpOf(clip) {
+    try { return clip.projectItem.getMediaPath(); } catch (e) { return ""; }
 }
 
 function SP_ping() {
@@ -50,7 +40,6 @@ function SP_ping() {
     } catch (e) { return J({ ok: false, error: String(e) }); }
 }
 
-/* lee clips seleccionados; si no hay seleccion, V1 completa */
 function SP_readSel() {
     var res = { ok: false };
     try {
@@ -67,8 +56,7 @@ function SP_readSel() {
                 var sel = false;
                 try { sel = cl.isSelected(); } catch (eS) {}
                 if (sel) clips.push({ track: t, start: cl.start.seconds - res.zeroSec,
-                    end: cl.end.seconds - res.zeroSec, name: cl.name, inSec: cl.inPoint.seconds, mp: "" });
-                try { if (sel) clips[clips.length - 1].mp = cl.projectItem.getMediaPath(); } catch (eM) {}
+                    end: cl.end.seconds - res.zeroSec, name: cl.name, inSec: cl.inPoint.seconds, mp: mpOf(cl) });
             }
         }
         if (!clips.length) {
@@ -76,8 +64,7 @@ function SP_readSel() {
             for (var c2 = 0; c2 < tr0.clips.numItems; c2++) {
                 var cl2 = tr0.clips[c2];
                 clips.push({ track: 0, start: cl2.start.seconds - res.zeroSec,
-                    end: cl2.end.seconds - res.zeroSec, name: cl2.name, inSec: cl2.inPoint.seconds, mp: "" });
-                try { clips[clips.length - 1].mp = cl2.projectItem.getMediaPath(); } catch (eM2) {}
+                    end: cl2.end.seconds - res.zeroSec, name: cl2.name, inSec: cl2.inPoint.seconds, mp: mpOf(cl2) });
             }
             res.source = "V1 completa";
         } else res.source = "seleccion";
@@ -87,9 +74,73 @@ function SP_readSel() {
     } catch (e) { res.error = e.toString(); return J(res); }
 }
 
-/* SPREAD: recoge los clips, los quita y recoloca 1 por pista, mismo instante */
+/* busca clips de audio cuyo media+posicion coincida con la lista fuente */
+function audioMatches(seq, srcList) {
+    var out = [];
+    for (var a = 0; a < seq.audioTracks.numTracks; a++) {
+        var tr = seq.audioTracks[a];
+        for (var c = 0; c < tr.clips.numItems; c++) {
+            var cl = tr.clips[c];
+            var mp = mpOf(cl);
+            if (!mp) continue;
+            for (var s = 0; s < srcList.length; s++) {
+                if (mp === srcList[s].mp && Math.abs(cl.start.seconds - (srcList[s].start + getZeroSec(seq))) < 0.08) {
+                    out.push({ track: a, start: cl.start.seconds, end: cl.end.seconds,
+                               inSec: cl.inPoint.seconds, mp: mp, srcIdx: s });
+                    break;
+                }
+            }
+        }
+    }
+    return out;
+}
+
+/* quita de las pistas los clips (video y audio) que coincidan con la lista */
+function removeSources(seq, srcList, errs) {
+    var removed = 0, t, c, s, cl, mp;
+    for (t = 0; t < seq.videoTracks.numTracks; t++) {
+        var tv = seq.videoTracks[t];
+        for (c = tv.clips.numItems - 1; c >= 0; c--) {
+            cl = tv.clips[c];
+            mp = mpOf(cl);
+            for (s = 0; s < srcList.length; s++) {
+                if (mp === srcList[s].mp && Math.abs(cl.start.seconds - (srcList[s].start + getZeroSec(seq))) < 0.08) {
+                    try { cl.remove(false, false); removed++; } catch (eR) { errs.push("quitar V" + (t + 1) + ": " + eR); }
+                    break;
+                }
+            }
+        }
+    }
+    for (t = 0; t < seq.audioTracks.numTracks; t++) {
+        var ta = seq.audioTracks[t];
+        for (c = ta.clips.numItems - 1; c >= 0; c--) {
+            cl = ta.clips[c];
+            mp = mpOf(cl);
+            for (s = 0; s < srcList.length; s++) {
+                if (mp === srcList[s].mp && Math.abs(cl.start.seconds - (srcList[s].start + getZeroSec(seq))) < 0.08) {
+                    try { cl.remove(false, false); removed++; } catch (eR2) { errs.push("quitar A" + (t + 1) + ": " + eR2); }
+                    break;
+                }
+            }
+        }
+    }
+    return removed;
+}
+
+function ensureTracks(seq, needV, needA, res) {
+    try {
+        while (seq.videoTracks.numTracks < needV) { seq.addVideoTrack(); res.addedTracks++; }
+        while (seq.audioTracks.numTracks < needA) { seq.addAudioTrack(); res.addedTracks++; }
+        return true;
+    } catch (eT) {
+        res.errors.push("No pude crear pistas (" + eT + "). Crea " + needV + "V/" + needA + "A a mano y reintenta.");
+        return false;
+    }
+}
+
+/* SPREAD: cada clip (video+audio) a su propia pareja de pistas, mismo instante */
 function SP_spread() {
-    var res = { ok: false, spread: 0, errors: [] };
+    var res = { ok: false, spread: 0, audio: 0, addedTracks: 0, errors: [] };
     function err(m) { res.errors.push(String(m)); }
     try {
         var seq = app.project ? app.project.activeSequence : null;
@@ -98,131 +149,164 @@ function SP_spread() {
         var read = eval("(" + SP_readSel() + ")");
         if (!read.ok || !read.clips.length) { err("No hay clips (selecciona o usa V1)"); return J(res); }
         var clips = read.clips;
-        if (clips.length > seq.videoTracks.numTracks) {
-            err("Hay " + clips.length + " clips pero solo " + seq.videoTracks.numTracks +
-                " pistas de vídeo. Añade pistas (botón + en la cabecera de la timeline) y reintenta.");
-            return J(res);
-        }
+
+        if (!ensureTracks(seq, clips.length, clips.length, res)) { res.ok = false; return J(res); }
+
         var items = [], missing = [];
         for (var i = 0; i < clips.length; i++) {
-            var it = clips[i].mp ? findProjectItemByMediaPath(clips[i].mp) : null;
+            var it = null;
+            if (clips[i].mp) {
+                (function walk(bin) {
+                    if (it) return;
+                    var n = bin.children.numItems;
+                    for (var q = 0; q < n; q++) {
+                        var ch = bin.children[q];
+                        if (ch.type === ProjectItemType.BIN) { walk(ch); continue; }
+                        try { if (ch.getMediaPath() === clips[i].mp) { it = ch; return; } } catch (e) {}
+                    }
+                })(app.project.rootItem);
+            }
             if (!it) missing.push(clips[i].name || ("clip " + (i + 1)));
             items.push(it);
         }
-        if (missing.length) { err("No encuentro estos medios en el proyecto: " + missing.join(", ") + " (¿anidados?)"); return J(res); }
+        if (missing.length) { err("No encuentro en el proyecto: " + missing.join(", ") + " (¿anidados?)"); return J(res); }
 
-        var tr0 = seq.videoTracks[0];
-        while (tr0.clips.numItems > 0) {
-            try { tr0.clips[0].remove(false, false); }
-            catch (eR) { err("quitando: " + eR); break; }
-        }
+        removeSources(seq, clips, res.errors);
+
         for (var k = 0; k < clips.length; k++) {
             var c = clips[k], item = items[k];
+            var dur = c.end - c.start;
             try {
                 item.setInPoint(c.inSec, 4);
-                item.setOutPoint(c.inSec + (c.end - c.start), 4);
+                item.setOutPoint(c.inSec + dur, 4);
                 seq.videoTracks[k].overwriteClip(item, c.start + zero);
-                try { item.clearInPoint(4); } catch (e1) {}
-                try { item.clearOutPoint(4); } catch (e2) {}
                 res.spread++;
-            } catch (eP) { err("clip " + (k + 1) + ": " + eP); }
+            } catch (eP) { err("video clip " + (k + 1) + ": " + eP); continue; }
+            try {
+                item.setInPoint(c.inSec, 4);
+                item.setOutPoint(c.inSec + dur, 4);
+                seq.audioTracks[k].overwriteClip(item, c.start + zero);
+                res.audio++;
+            } catch (eA) { err("audio clip " + (k + 1) + ": " + eA); }
+            try { item.clearInPoint(4); } catch (e1) {}
+            try { item.clearOutPoint(4); } catch (e2) {}
         }
         res.ok = res.spread > 0;
         return J(res);
     } catch (e) { res.errors.push("FATAL: " + e.toString() + " (linea " + e.line + ")"); return J(res); }
 }
 
-/* prepara el sync: selecciona TODOS los clips de todas las pistas de vídeo */
-function SP_prepareSync() {
-    var res = { ok: false, selected: 0, audioTracks: 0 };
-    try {
-        var seq = app.project ? app.project.activeSequence : null;
-        if (!seq) { res.error = "No hay secuencia activa"; return J(res); }
-        res.ok = true;
-        for (var t = 0; t < seq.audioTracks.numTracks; t++)
-            if (seq.audioTracks[t].clips.numItems > 0) res.audioTracks++;
-        var first = true;
-        for (var v = 0; v < seq.videoTracks.numTracks; v++) {
-            var tr = seq.videoTracks[v];
-            for (var c = 0; c < tr.clips.numItems; c++) {
-                try {
-                    tr.clips[c].setSelected(true, first);  // el primero deselecciona el resto
-                    first = false;
-                    res.selected++;
-                } catch (eSel) {}
-            }
-        }
-        if (!res.selected) res.error = "No hay clips que seleccionar";
-        return J(res);
-    } catch (e) { res.error = e.toString(); return J(res); }
-}
-
-/* RE-STACK: agrupa los clips por instante de inicio y los apila en cascada desde V1 */
+/* RE-STACK: agrupa video+audio, recorta a la zona comun y apila en cascada
+   payload: { layout: "squashed" | "perdevice" } */
 function SP_restack(optsJson) {
-    var res = { ok: false, stacked: 0, errors: [] };
+    var res = { ok: false, stacked: 0, audio: 0, addedTracks: 0, errors: [], trimmed: false };
     function err(m) { res.errors.push(String(m)); }
+    var TOL = 0.05;
     try {
         var seq = app.project ? app.project.activeSequence : null;
         if (!seq) { err("No hay secuencia activa"); return J(res); }
         var zero = getZeroSec(seq);
-        var clips = [];
-        for (var t = 0; t < seq.videoTracks.numTracks; t++) {
-            var tr = seq.videoTracks[t];
-            for (var c = 0; c < tr.clips.numItems; c++) {
-                var cl = tr.clips[c];
-                clips.push({ start: cl.start.seconds, end: cl.end.seconds,
-                             inSec: cl.inPoint.seconds, mp: "", name: cl.name });
-                try { clips[clips.length - 1].mp = cl.projectItem.getMediaPath(); } catch (eM) {}
-            }
-        }
-        if (!clips.length) { err("No hay clips"); return J(res); }
-        var items = [];
-        for (var i2 = 0; i2 < clips.length; i2++) items.push(clips[i2].mp ? findProjectItemByMediaPath(clips[i2].mp) : null);
-        for (var t2 = 0; t2 < seq.videoTracks.numTracks; t2++) {
-            var trR = seq.videoTracks[t2];
-            while (trR.clips.numItems > 0) {
-                try { trR.clips[0].remove(false, false); } catch (eR2) { err("quitando: " + eR2); break; }
-            }
-        }
-        var byStart = {};
-        for (var k = 0; k < clips.length; k++) {
-            var key = Math.round(clips[k].start * 25);
-            (byStart[key] = byStart[key] || []).push(k);
-        }
         var opts = null;
         try { opts = eval("(" + optsJson + ")"); } catch (eO) {}
-        var perDevice = opts && opts.layout === 'perdevice';
-        var groups = Object.keys(byStart).map(Number).sort(function (a, b) { return a - b; });
-        var slot = 0;
-        for (var g = 0; g < groups.length; g++) {
-            var grp = byStart[groups[g]];
-            for (var j = 0; j < grp.length; j++) {
-                var idx = grp[j], c = clips[idx], it = items[idx];
-                if (!it) { err("media no encontrado: " + (c.name || idx)); continue; }
-                try {
-                    it.setInPoint(c.inSec, 4);
-                    it.setOutPoint(c.inSec + (c.end - c.start), 4);
-                    var targetTrack = perDevice ? (c.track || 0) : (slot % seq.videoTracks.numTracks);
-                    seq.videoTracks[targetTrack].overwriteClip(it, c.start + zero);
-                    try { it.clearInPoint(4); } catch (e1) {}
-                    try { it.clearOutPoint(4); } catch (e2) {}
-                    res.stacked++; slot++;
-                } catch (eP) { err("recolocando " + (c.name || idx) + ": " + eP); }
+        var perDevice = !!(opts && opts.layout === "perdevice");
+
+        // 1) recoger video y audio de todas las pistas
+        var vids = [], auds = [], t, c;
+        for (t = 0; t < seq.videoTracks.numTracks; t++) {
+            var tv = seq.videoTracks[t];
+            for (c = 0; c < tv.clips.numItems; c++) {
+                var cv = tv.clips[c];
+                vids.push({ track: t, start: cv.start.seconds, end: cv.end.seconds,
+                            inSec: cv.inPoint.seconds, mp: mpOf(cv), name: cv.name, aud: -1 });
             }
+        }
+        for (t = 0; t < seq.audioTracks.numTracks; t++) {
+            var ta = seq.audioTracks[t];
+            for (c = 0; c < ta.clips.numItems; c++) {
+                var ca = ta.clips[c];
+                auds.push({ track: t, start: ca.start.seconds, end: ca.end.seconds,
+                            inSec: ca.inPoint.seconds, mp: mpOf(ca), used: false });
+            }
+        }
+        if (!vids.length) { err("No hay clips de video"); return J(res); }
+
+        // 2) emparejar cada audio con el video del mismo media mas cercano en tiempo
+        for (var a2 = 0; a2 < auds.length; a2++) {
+            var best = -1, bestD = 1e9;
+            for (var v2 = 0; v2 < vids.length; v2++) {
+                if (vids[v2].aud >= 0) continue;
+                if (auds[a2].mp && auds[a2].mp === vids[v2].mp) {
+                    var d = Math.abs(auds[a2].start - vids[v2].start);
+                    if (d < bestD) { bestD = d; best = v2; }
+                }
+            }
+            if (best >= 0 && bestD < 30) { vids[best].aud = a2; auds[a2].used = true; }
+        }
+
+        // 3) zona comun (solape de todos los videos)
+        var cs0 = vids[0].start, ce0 = vids[0].end;
+        for (var v3 = 1; v3 < vids.length; v3++) {
+            if (vids[v3].start > cs0) cs0 = vids[v3].start;
+            if (vids[v3].end < ce0) ce0 = vids[v3].end;
+        }
+        var trim = (ce0 - cs0) > 0.2;
+        res.trimmed = trim;
+        var base = trim ? cs0 : vids[0].start;
+        for (var v4 = 1; v4 < vids.length; v4++)
+            if (!trim && vids[v4].start < base) base = vids[v4].start;
+        if (!trim) err("Aviso: los clips no solapan; no recorto, solo apilo desde el mas temprano.");
+
+        // 4) pistas necesarias
+        var needV = vids.length, needA = 0;
+        for (var v5 = 0; v5 < vids.length; v5++) if (vids[v5].aud >= 0) needA++;
+        if (!ensureTracks(seq, needV, needA, res)) { res.ok = false; return J(res); }
+
+        // 5) quitar todo (video completo; audio solo los emparejados — el resto se queda aparcado)
+        var srcAll = [];
+        for (var v6 = 0; v6 < vids.length; v6++)
+            srcAll.push({ mp: vids[v6].mp, start: vids[v6].start - zero });
+        removeSources(seq, srcAll, res.errors);
+
+        // 6) recolocar: unidad i -> pista i (squashed) o su pista original (perdevice)
+        for (var u = 0; u < vids.length; u++) {
+            var unit = vids[u];
+            var dur = trim ? (ce0 - cs0) : (unit.end - unit.start);
+            var vin = trim ? (unit.inSec + (base - unit.start)) : unit.inSec;
+            var tV = perDevice ? unit.track : u;
+            var item = null;
+            if (unit.mp) {
+                (function find2(bin) {
+                    if (item) return;
+                    var n = bin.children.numItems;
+                    for (var q = 0; q < n; q++) {
+                        var ch = bin.children[q];
+                        if (ch.type === ProjectItemType.BIN) { find2(ch); continue; }
+                        try { if (ch.getMediaPath() === unit.mp) { item = ch; return; } } catch (e) {}
+                    }
+                })(app.project.rootItem);
+            }
+            if (!item) { err("media no encontrado: " + (unit.name || u)); continue; }
+            try {
+                item.setInPoint(vin, 4);
+                item.setOutPoint(vin + dur, 4);
+                seq.videoTracks[tV].overwriteClip(item, base + zero);
+                res.stacked++;
+            } catch (eP2) { err("video " + (u + 1) + ": " + eP2); continue; }
+            if (unit.aud >= 0) {
+                var au = auds[unit.aud];
+                var ain = trim ? (au.inSec + (base - au.start)) : au.inSec;
+                var tA = perDevice ? au.track : u;
+                try {
+                    item.setInPoint(ain, 4);
+                    item.setOutPoint(ain + dur, 4);
+                    seq.audioTracks[tA].overwriteClip(item, base + zero);
+                    res.audio++;
+                } catch (eA2) { err("audio " + (u + 1) + ": " + eA2); }
+            }
+            try { item.clearInPoint(4); } catch (e1) {}
+            try { item.clearOutPoint(4); } catch (e2) {}
         }
         res.ok = res.stacked > 0;
         return J(res);
     } catch (e) { res.errors.push("FATAL: " + e.toString() + " (linea " + e.line + ")"); return J(res); }
-}
-
-function SP_backup() {
-    try {
-        var seq = app.project ? app.project.activeSequence : null;
-        if (!seq) return J({ ok: false, error: "No hay secuencia activa" });
-        var cl = null;
-        try { cl = seq.clone(); } catch (e1) { cl = null; }
-        if (!cl) { try { cl = app.project.createNewSequenceFromSequence(seq.name + " [BACKUP]", seq); } catch (e2) { cl = null; } }
-        if (!cl) return J({ ok: false, error: "No se pudo clonar" });
-        return J({ ok: true, name: cl.name });
-    } catch (e) { return J({ ok: false, error: String(e) }); }
 }

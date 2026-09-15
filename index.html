@@ -5,29 +5,25 @@
 <title>Separación</title>
 <style>
     :root { --panel-bg: #1e1e20; --btn-bg: #2a2b2e; --btn-bg-hover: #33343a; --btn-border: #3a3b3e; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: var(--panel-bg); color: #eee; padding: 10px; margin: 0; }
-    .titlebar { display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 4px 6px; border-radius: 6px; user-select: none; position: relative; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--panel-bg); color: #eee; padding: 6px; margin: 0; }
+    .titlebar { display: flex; align-items: center; gap: 5px; cursor: pointer; padding: 2px 4px; border-radius: 5px; user-select: none; position: relative; }
     .titlebar:hover { background: var(--btn-bg); }
-    .titlebar .tname { font-size: 13px; font-weight: 600; color: #ddd; }
-    .titlebar .dots { color: #888; font-size: 12px; }
-    .pop { position: absolute; top: 30px; left: 0; width: 300px; background: #232427; border: 1px solid #444; border-radius: 12px; padding: 12px 14px; box-shadow: 0 8px 28px rgba(0,0,0,.55); display: none; z-index: 50; }
+    .tname { font-size: 11px; font-weight: 600; color: #ccc; }
+    .dots { color: #888; font-size: 10px; }
+    .pop { position: absolute; top: 20px; left: 0; width: 220px; background: #232427; border: 1px solid #444; border-radius: 10px; padding: 8px 10px; box-shadow: 0 6px 22px rgba(0,0,0,.55); display: none; z-index: 50; }
     .pop.open { display: block; }
-    .pop h4 { margin: 0 0 10px; text-align: center; font-size: 13px; color: #eee; }
-    .srow { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 0; border-bottom: 1px solid #2e2f33; }
-    .srow:last-of-type { border-bottom: none; }
-    .srow .slbl { font-size: 11px; color: #ccc; }
-    .seg { display: flex; background: #1a1b1d; border-radius: 7px; padding: 2px; gap: 2px; }
-    .seg button { border: none; background: transparent; color: #8a8b90; font-size: 10px; padding: 4px 9px; border-radius: 5px; cursor: pointer; font-weight: 600; }
+    .pop h4 { margin: 0 0 6px; text-align: center; font-size: 11px; color: #eee; }
+    .srow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 0; }
+    .slbl { font-size: 10px; color: #bbb; }
+    .seg { display: flex; background: #1a1b1d; border-radius: 6px; padding: 2px; gap: 2px; }
+    .seg button { border: none; background: transparent; color: #8a8b90; font-size: 9px; padding: 3px 7px; border-radius: 4px; cursor: pointer; font-weight: 600; }
     .seg button.on { background: #3a3b40; color: #fff; }
-    .seg button.on.del { color: #ff7b7b; }
-    .snote { font-size: 9px; color: #77787c; text-align: center; margin-top: 8px; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 8px; }
-    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 12px; height: 80px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 6px; }
+    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 10px; height: 56px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
     .big:hover { background: var(--btn-bg-hover); }
     .big.disabled { opacity: .4; pointer-events: none; }
-    .big .icon { font-size: 26px; color: #bbb; }
-    .big .lbl { font-size: 11px; color: #9aa; margin-top: 5px; font-weight: bold; }
-    #status { margin-top: 10px; font-size: 10px; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 150px; overflow-y: auto; }
+    .big .icon { font-size: 22px; color: #bbb; }
+    #status { margin-top: 6px; font-size: 9px; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 120px; overflow-y: auto; }
     #status.ok { color: #7ed957; } #status.err { color: #ff6b6b; }
 </style>
 </head>
@@ -36,50 +32,31 @@
         <span class="tname">Separación</span>
         <span class="dots">⋮</span>
         <div class="pop" id="settingsPop">
-            <h4>Separación — Settings</h4>
+            <h4>Settings</h4>
             <div class="srow">
-                <span class="slbl">Auto-sync tras Spread</span>
-                <div class="seg" data-key="autoSync">
-                    <button data-v="on" class="on">On</button><button data-v="off">Off</button>
-                </div>
-            </div>
-            <div class="srow">
-                <span class="slbl">Trim to video</span>
-                <div class="seg" data-key="trim">
-                    <button data-v="trim" class="on">Trim</button><button data-v="full">Full length</button>
-                </div>
-            </div>
-            <div class="srow">
-                <span class="slbl">Leftover audio</span>
-                <div class="seg" data-key="leftover">
-                    <button data-v="park" class="on">Park</button><button data-v="delete" class="del">Delete</button>
-                </div>
-            </div>
-            <div class="srow">
-                <span class="slbl">Track layout (Re-stack)</span>
+                <span class="slbl">Track layout</span>
                 <div class="seg" data-key="layout">
-                    <button data-v="squashed" class="on">Squashed</button><button data-v="perdevice">Per device</button>
+                    <button data-v="squashed" class="on">Squashed</button>
+                    <button data-v="perdevice">Per device</button>
                 </div>
             </div>
-            <div class="snote">Los cambios se aplican en cada ejecución.</div>
+            <div class="srow">
+                <span class="slbl" style="color:#77787c; font-size:9px;">Squashed: apila y recorta al solape común (listo p/ multicam). Per device: cada clip vuelve a su pista.</span>
+            </div>
         </div>
     </div>
 
     <div class="grid">
-        <div class="big" id="btnSpread" title="Un clip por pista + abre Synchronize">
-            <div class="icon">⏫</div>
-        </div>
-        <div class="big" id="btnRestck" title="Reconstruir en cascada">
-            <div class="icon">⏬</div>
-        </div>
+        <div class="big" id="btnSpread" title="Separar: un clip por pista (vídeo+audio)"><div class="icon">⏫</div></div>
+        <div class="big" id="btnRestck" title="Re-apilar en cascada"><div class="icon">⏬</div></div>
     </div>
-    <div id="status">Comprobando Premiere...</div>
+    <div id="status">...</div>
 
     <script src="./js/CSInterface.js"></script>
     <script>
         const cs = new CSInterface();
         const statusEl = document.getElementById('status');
-        let SETTINGS = { backup: 'on', autoSync: 'on', trim: 'trim', leftover: 'park', layout: 'squashed' };
+        let SETTINGS = { layout: 'squashed' };
         let busy = false;
 
         (function () {
@@ -102,15 +79,9 @@
             document.getElementById('btnRestck').classList.toggle('disabled', b);
         }
 
-        /* ---- settings popup ---- */
         const pop = document.getElementById('settingsPop');
-        document.getElementById('titlebar').addEventListener('click', (e) => {
-            e.stopPropagation();
-            pop.classList.toggle('open');
-        });
-        document.addEventListener('click', (e) => {
-            if (pop.classList.contains('open') && !pop.contains(e.target)) pop.classList.remove('open');
-        });
+        document.getElementById('titlebar').addEventListener('click', (e) => { e.stopPropagation(); pop.classList.toggle('open'); });
+        document.addEventListener('click', (e) => { if (pop.classList.contains('open') && !pop.contains(e.target)) pop.classList.remove('open'); });
         document.querySelectorAll('.seg').forEach(seg => {
             seg.addEventListener('click', (e) => {
                 const btn = e.target.closest('button'); if (!btn) return;
@@ -118,7 +89,6 @@
                 btn.classList.add('on');
                 SETTINGS[seg.dataset.key] = btn.dataset.v;
                 localStorage.setItem('separacion_settings', JSON.stringify(SETTINGS));
-                setStatus('Settings: ' + seg.dataset.key + ' = ' + btn.dataset.v);
             });
         });
         try {
@@ -133,98 +103,39 @@
         cs.evalScript('SP_ping()', (res) => {
             try {
                 const r = JSON.parse(res);
-                setStatus(r.ok ? `"${r.seq}" · ${r.videoTracks}V / ${r.audioTracks}A` : `Premiere: ${r.error}`);
-            } catch (e) { setStatus('JSX no cargado. Reinicia Premiere. ' + res, 'err'); }
+                setStatus(r.ok ? `"${r.seq}" · ${r.videoTracks}V/${r.audioTracks}A` : `Premiere: ${r.error}`);
+            } catch (e) { setStatus('JSX no cargado. Reinicia Premiere.', 'err'); }
         });
-
-        function withBackup(next) { next(); }  // backup retirado a petición del usuario
-
-        function invokeSynchronizeMenu(done) {
-            let cp = null;
-            try { cp = require('child_process'); } catch (e) { cp = null; }
-            if (!cp) { done('failed', 'Node no disponible'); return; }
-            const script = [
-                'tell application "System Events"',
-                '  set procs to every application process whose name starts with "Adobe Premiere Pro"',
-                '  if (count of procs) is not 1 then error "PREMIERE_COUNT|" & (count of procs)',
-                '  tell item 1 of procs',
-                '    set frontmost to true',
-                '    delay 0.3',
-                '    click (first menu item of menu "Clip" of menu bar item "Clip" of menu bar 1 whose name starts with "Synchroni")',
-                '  end tell',
-                '  return "INVOKED"',
-                'end tell'
-            ].join('\n');
-            cp.execFile('/usr/bin/osascript', ['-e', script], { timeout: 12000 }, (err, stdout, stderr) => {
-                const txt = String((stderr || '') + (err && err.message ? '\n' + err.message : ''));
-                if (!err) { done('invoked', txt); return; }
-                if (/-1743|not authorized|no está autorizado/i.test(txt)) done('needs-automation', txt);
-                else if (/assistive/i.test(txt)) done('needs-accessibility', txt);
-                else if (/PREMIERE_COUNT\|0/.test(txt)) done('no-premiere', txt);
-                else if (/PREMIERE_COUNT\|/.test(txt)) done('multi-premiere', txt);
-                else done('failed', txt);
-            });
-        }
-
-        const PERM_HELP = {
-            'needs-automation': 'macOS necesita permiso para controlar Premiere.\n→ Privacidad y seguridad > Automatización > Premiere > activa System Events. Reintenta.',
-            'needs-accessibility': 'macOS pide Accesibilidad para clicar menús.\n→ Privacidad y seguridad > Accesibilidad > activa Premiere. Reintenta.',
-            'no-premiere': 'No encontré Premiere abierto.',
-            'multi-premiere': 'Varias versiones de Premiere abiertas. Cierra todas menos una.',
-            'failed': 'No pude clicar Synchronize. Hazlo a mano: Cmd+A y Clip > Synchronize > Audio.'
-        };
 
         document.getElementById('btnSpread').addEventListener('click', () => {
             if (busy) return;
             setBusy(true);
-            setStatus('Leyendo selección...');
-            cs.evalScript('SP_readSel()', (res) => {
+            setStatus('Separando...');
+            cs.evalScript('SP_spread()', (res) => {
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
-                if (!r || !r.ok) { setStatus('Error: ' + (r ? r.error : res), 'err'); setBusy(false); return; }
-                if (r.count < 2) { setStatus('Necesito 2+ clips (seleccionados o en V1).', 'err'); setBusy(false); return; }
-                withBackup(() => {
-                    setStatus(r.count + ' clips. Separando en pistas...');
-                    cs.evalScript('SP_spread()', (res2) => {
-                        let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
-                        if (!r2 || !r2.ok) { setStatus('Spread falló:\n' + (r2 ? r2.errors.join('\n') : res2), 'err'); setBusy(false); return; }
-                        setStatus('✔ Spread: ' + r2.spread + ' clips, uno por pista.');
-                        if (SETTINGS.autoSync !== 'on') { setBusy(false); return; }
-                        setTimeout(() => {
-                            setStatus('Seleccionando todos...');
-                            cs.evalScript('SP_prepareSync()', (res3) => {
-                                let r3 = null; try { r3 = JSON.parse(res3); } catch (e) {}
-                                if (!r3 || !r3.ok || !r3.selected) {
-                                    setStatus('Spread OK, pero no pude seleccionar.\nCmd+A y Clip > Synchronize > Audio a mano.', 'err');
-                                    setBusy(false); return;
-                                }
-                                setStatus(r3.selected + ' seleccionados. Abriendo Synchronize...');
-                                invokeSynchronizeMenu((st, detail) => {
-                                    if (st === 'invoked') {
-                                        setStatus('✔ Synchronize abierto. Elige Audio y acepta. Luego RE-STACK.');
-                                        setBusy(false);
-                                    } else {
-                                        setStatus((PERM_HELP[st] || PERM_HELP.failed) + '\n\nDetalle:\n' + String(detail).slice(-250), 'err');
-                                        setBusy(false);
-                                    }
-                                });
-                            });
-                        }, 400);
-                    });
-                });
+                setBusy(false);
+                if (r && r.ok) {
+                    let m = `✔ ${r.spread} vídeo / ${r.audio} audio en pistas propias`;
+                    if (r.addedTracks) m += ` · ${r.addedTracks} pistas creadas`;
+                    m += '\nAhora: Cmd+A → Clip > Synchronize → Audio.\nCuando acabe, pulsa ⏬';
+                    setStatus(m, 'ok');
+                } else setStatus('Spread falló:\n' + (r ? r.errors.join('\n') : res), 'err');
             });
         });
 
         document.getElementById('btnRestck').addEventListener('click', () => {
             if (busy) return;
             setBusy(true);
-            withBackup(() => {
-                setStatus('Reconstruyendo (' + SETTINGS.layout + ')...');
-                cs.evalScript('SP_restack(' + JSON.stringify(JSON.stringify({ layout: SETTINGS.layout })) + ')', (res) => {
-                    let r = null; try { r = JSON.parse(res); } catch (e) {}
-                    setBusy(false);
-                    if (r && r.ok) setStatus('✔ Re-stack: ' + r.stacked + ' clips (' + SETTINGS.layout + ').', 'ok');
-                    else setStatus('Re-stack falló:\n' + (r ? r.errors.join('\n') : res), 'err');
-                });
+            setStatus('Re-apilando (' + SETTINGS.layout + ')...');
+            cs.evalScript('SP_restack(' + JSON.stringify(JSON.stringify({ layout: SETTINGS.layout })) + ')', (res) => {
+                let r = null; try { r = JSON.parse(res); } catch (e) {}
+                setBusy(false);
+                if (r && r.ok) {
+                    let m = `✔ ${r.stacked} vídeo / ${r.audio} audio apilados`;
+                    if (r.trimmed) m += ' · recortados al solape común';
+                    if (r.addedTracks) m += ` · ${r.addedTracks} pistas creadas`;
+                    setStatus(m, 'ok');
+                } else setStatus('Re-stack falló:\n' + (r ? r.errors.join('\n') : res), 'err');
             });
         });
     </script>
