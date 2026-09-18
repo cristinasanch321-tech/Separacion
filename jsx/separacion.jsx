@@ -382,3 +382,92 @@ function SP_fitSelection(mode) {
         return J(res);
     } catch (e) { res.errors.push("FATAL: " + e.toString() + " (linea " + e.line + ")"); return J(res); }
 }
+
+/* ---- v3.5: escala con dimensiones leidas del ARCHIVO (por el panel via Node) ---- */
+function findScaleProp(comp) {
+    var props = comp.properties;
+    var uni = null, ph = null, pw = null;
+    for (var pi = 0; pi < props.numItems; pi++) {
+        var nm = String(props[pi].displayName).toLowerCase();
+        if (nm === "scale" || nm === "escala") uni = props[pi];
+        if (nm.indexOf("scale height") >= 0 || nm.indexOf("altura de escala") >= 0) ph = props[pi];
+        if (nm.indexOf("scale width") >= 0 || nm.indexOf("anchura de escala") >= 0) pw = props[pi];
+    }
+    return { uni: uni, ph: ph, pw: pw };
+}
+
+function SP_getSelMedia() {
+    var res = { ok: false, clips: [] };
+    try {
+        var seq = app.project ? app.project.activeSequence : null;
+        if (!seq) { res.error = "No hay secuencia activa"; return J(res); }
+        res.ok = true;
+        res.W = seq.frameSizeHorizontal;
+        res.H = seq.frameSizeVertical;
+        for (var t = 0; t < seq.videoTracks.numTracks; t++) {
+            var tr = seq.videoTracks[t];
+            for (var c = 0; c < tr.clips.numItems; c++) {
+                var cl = tr.clips[c];
+                var sel = false;
+                try { sel = cl.isSelected(); } catch (eS) {}
+                if (!sel) continue;
+                var path = "", name = "clip", scale = 100;
+                try { path = cl.projectItem.getMediaPath(); } catch (eP) {}
+                try { name = cl.name; } catch (eN) {}
+                var comps = null;
+                try { comps = cl.components; } catch (eC) {}
+                if (comps) {
+                    for (var ci = 0; ci < comps.numItems; ci++) {
+                        var dn = String(comps[ci].displayName).toLowerCase();
+                        if (dn.indexOf("motion") < 0 && dn.indexOf("movimiento") < 0) continue;
+                        var sp = findScaleProp(comps[ci]);
+                        try {
+                            if (sp.uni) scale = Number(sp.uni.getValue());
+                            else if (sp.ph) scale = Number(sp.ph.getValue());
+                        } catch (eV) {}
+                        break;
+                    }
+                }
+                res.clips.push({ name: name, path: path, scale: scale });
+            }
+        }
+        return J(res);
+    } catch (e) { res.error = e.toString(); return J(res); }
+}
+
+function SP_applyScaleToPath(mp, scale) {
+    var res = { ok: false, applied: 0, errors: [] };
+    try {
+        var seq = app.project ? app.project.activeSequence : null;
+        if (!seq) { res.error = "No hay secuencia activa"; return J(res); }
+        for (var t = 0; t < seq.videoTracks.numTracks; t++) {
+            var tr = seq.videoTracks[t];
+            for (var c = 0; c < tr.clips.numItems; c++) {
+                var cl = tr.clips[c];
+                var sel = false;
+                try { sel = cl.isSelected(); } catch (eS) {}
+                if (!sel) continue;
+                var cmp = "";
+                try { cmp = cl.projectItem.getMediaPath(); } catch (eP) {}
+                if (cmp !== mp) continue;
+                var comps = null;
+                try { comps = cl.components; } catch (eC) {}
+                if (!comps) { res.errors.push(cl.name + ": sin Motion"); continue; }
+                var applied = false;
+                for (var ci = 0; ci < comps.numItems && !applied; ci++) {
+                    var dn = String(comps[ci].displayName).toLowerCase();
+                    if (dn.indexOf("motion") < 0 && dn.indexOf("movimiento") < 0) continue;
+                    var sp = findScaleProp(comps[ci]);
+                    try {
+                        if (sp.uni) { sp.uni.setValue(Number(scale), true); applied = true; }
+                        else if (sp.ph && sp.pw) { sp.ph.setValue(Number(scale), true); sp.pw.setValue(Number(scale), true); applied = true; }
+                    } catch (eV) { res.errors.push(cl.name + ": " + eV); }
+                }
+                if (applied) res.applied++;
+                else res.errors.push(cl.name + ": Motion > Scale no encontrado");
+            }
+        }
+        res.ok = res.applied > 0;
+        return J(res);
+    } catch (e) { res.error = e.toString(); return J(res); }
+}

@@ -135,14 +135,72 @@
             });
         });
 
+        // dimensiones reales desde la cabecera del archivo (box tkhd del MP4/MOV)
+        function mp4Dims(p) {
+            const f2 = require('fs');
+            const fd = f2.openSync(p, 'r');
+            try {
+                const size = f2.fstatSync(fd).size;
+                let dims = null;
+                const CONT = { moov: 1, trak: 1, mdia: 1, minf: 1, stbl: 1, edts: 1 };
+                const hb = Buffer.alloc(16);
+                function walk(pos, end, depth) {
+                    if (dims || depth > 6) return;
+                    let q = pos;
+                    while (q + 8 <= end && !dims) {
+                        if (f2.readSync(fd, hb, 0, 16, q) < 8) return;
+                        let sz = hb.readUInt32BE(0);
+                        const ty = hb.toString('ascii', 4, 8);
+                        let hdr = 8;
+                        if (sz === 1) { sz = Number(hb.readBigUInt64BE(8)); hdr = 16; }
+                        if (sz < hdr) return;
+                        if (ty === 'tkhd') {
+                            const tail = Buffer.alloc(8);
+                            f2.readSync(fd, tail, 0, 8, q + sz - 8);
+                            const w = tail.readUInt32BE(0) / 65536;
+                            const h = tail.readUInt32BE(4) / 65536;
+                            if (w > 0 && h > 0) dims = { w: Math.round(w), h: Math.round(h) };
+                            return;
+                        }
+                        if (CONT[ty]) walk(q + hdr, Math.min(q + sz, end), depth + 1);
+                        q += sz;
+                    }
+                }
+                walk(0, size, 0);
+                return dims;
+            } finally { f2.closeSync(fd); }
+        }
+
         function runFit(mode) {
             if (busy) return;
             setBusy(true);
-            cs.evalScript('SP_fitSelection(' + JSON.stringify(JSON.stringify({ mode: mode })) + ')', (res) => {
+            setStatus('Leyendo selección y archivo...');
+            cs.evalScript('SP_getSelMedia()', (res) => {
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
-                setBusy(false);
-                if (r && r.ok && r.scaled > 0) setStatus('✔ ' + r.scaled + ' escalado(s) proporcional.', 'ok');
-                else setStatus('No escalado:\n' + (r ? r.errors.join('\n') : res), 'err');
+                if (!r || !r.ok) { setStatus('Error: ' + (r ? r.error : res), 'err'); setBusy(false); return; }
+                if (!r.clips.length) { setStatus('No hay clips seleccionados.', 'err'); setBusy(false); return; }
+                let done = 0; const errs = [];
+                const finish = () => {
+                    setBusy(false);
+                    if (done) setStatus('✔ ' + done + ' escalado(s), proporcional.' + (errs.length ? '\n' + errs.join('\n') : ''), errs.length ? 'err' : 'ok');
+                    else setStatus('No escalado:\n' + errs.join('\n'), 'err');
+                };
+                r.clips.forEach((cl) => {
+                    try {
+                        if (!cl.path) { errs.push(cl.name + ': sin ruta de media'); return finishCheck(); }
+                        const dims = mp4Dims(cl.path);
+                        if (!dims) { errs.push(cl.name + ': no es MP4/MOV legible'); return finishCheck(); }
+                        const s = (mode === 'height') ? (r.H / dims.h) * 100 : (r.W / dims.w) * 100;
+                        const sc = Math.max(1, Math.min(20000, Math.round(s * 100) / 100));
+                        cs.evalScript('SP_applyScaleToPath(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
+                            let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
+                            if (r2 && r2.ok) done++;
+                            else errs.push(cl.name + ': ' + (r2 && r2.errors ? r2.errors.join('; ') : 'fallo'));
+                            finishCheck();
+                        });
+                    } catch (e) { errs.push(cl.name + ': ' + e.message); finishCheck(); }
+                    function finishCheck() { if (done + errs.length >= r.clips.length) finish(); }
+                });
             });
         }
         document.getElementById('btnFitH').addEventListener('click', () => runFit('height'));
