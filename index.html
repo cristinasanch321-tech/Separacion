@@ -252,8 +252,12 @@
                         if (!cl.path) { errs.push(cl.name + ': sin ruta de media'); return finishCheck(); }
                         const dims = fileDims(cl.path);
                         if (!dims) { errs.push(cl.name + ': formato sin dimensiones (soporto MP4/MOV/PNG/JPG/GIF/BMP)'); return finishCheck(); }
-                        const s = (mode === 'height') ? (r.H / dims.h) * 100 : (r.W / dims.w) * 100;
-                        const sc = Math.max(1, Math.min(20000, Math.round(s * 100) / 100));
+                        // escala ABSOLUTA deseada (% sobre el tamano nativo del media)
+                        const wantAbs = (mode === 'height') ? (r.H / dims.h) * 100 : (r.W / dims.w) * 100;
+                        // escala ACTUAL reportada por Premiere (puede incluir el auto-fit al insertar)
+                        const curScale = cl.scale || 100;
+                        // desvio relativo: cuanto hay que multiplicar lo ACTUAL para llegar al objetivo
+                        const sc = Math.max(1, Math.min(20000, Math.round(curScale * wantAbs / 100 * 100) / 100));
                         cs.evalScript('SP_applyScaleToPath(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
                             let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
                             if (r2 && r2.ok) done++;
