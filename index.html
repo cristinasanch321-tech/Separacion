@@ -135,8 +135,70 @@
             });
         });
 
-        // dimensiones reales desde la cabecera del archivo (box tkhd del MP4/MOV)
-        function mp4Dims(p) {
+        // dimensiones desde cabecera: MP4/MOV (tkhd), PNG, JPG, GIF, BMP
+        function fileDims(p) {
+            const f2 = require('fs');
+            const fd = f2.openSync(p, 'r');
+            try {
+                const hb = Buffer.alloc(64);
+                f2.readSync(fd, hb, 0, 64, 0);
+                // PNG
+                if (hb[0] === 0x89 && hb.toString('ascii', 1, 4) === 'PNG')
+                    return { w: hb.readUInt32BE(16), h: hb.readUInt32BE(20) };
+                // GIF
+                if (hb.toString('ascii', 0, 3) === 'GIF')
+                    return { w: hb.readUInt16LE(6), h: hb.readUInt16LE(8) };
+                // BMP
+                if (hb[0] === 0x42 && hb[1] === 0x4D)
+                    return { w: hb.readInt32LE(18), h: Math.abs(hb.readInt32LE(22)) };
+                // JPG (busca marcador SOFn)
+                if (hb[0] === 0xFF && hb[1] === 0xD8) {
+                    let pos = 2, buf;
+                    for (let guard = 0; guard < 64; guard++) {
+                        if (f2.readSync(fd, hb, 0, 4, pos) < 4) break;
+                        if (hb[0] !== 0xFF) break;
+                        const marker = hb[1], len = hb.readUInt16BE(2);
+                        if ((marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC5 && marker <= 0xC7) ||
+                            (marker >= 0xC9 && marker <= 0xCB) || (marker >= 0xCD && marker <= 0xCF)) {
+                            buf = Buffer.alloc(len);
+                            f2.readSync(fd, buf, 0, len, pos);
+                            return { h: buf.readUInt16BE(5), w: buf.readUInt16BE(7) };
+                        }
+                        pos += 2 + len;
+                    }
+                    return null;
+                }
+                // MP4/MOV: box tkhd
+                const size = f2.fstatSync(fd).size;
+                let dims = null;
+                const CONT = { moov: 1, trak: 1, mdia: 1, minf: 1, stbl: 1, edts: 1 };
+                function walk(pos, end, depth) {
+                    if (dims || depth > 6) return;
+                    let q = pos;
+                    while (q + 8 <= end && !dims) {
+                        if (f2.readSync(fd, hb, 0, 16, q) < 8) return;
+                        let sz = hb.readUInt32BE(0);
+                        const ty = hb.toString('ascii', 4, 8);
+                        let hdr = 8;
+                        if (sz === 1) { sz = Number(hb.readBigUInt64BE(8)); hdr = 16; }
+                        if (sz < hdr) return;
+                        if (ty === 'tkhd') {
+                            const tail = Buffer.alloc(8);
+                            f2.readSync(fd, tail, 0, 8, q + sz - 8);
+                            const w = tail.readUInt32BE(0) / 65536;
+                            const h = tail.readUInt32BE(4) / 65536;
+                            if (w > 0 && h > 0) dims = { w: Math.round(w), h: Math.round(h) };
+                            return;
+                        }
+                        if (CONT[ty]) walk(q + hdr, Math.min(q + sz, end), depth + 1);
+                        q += sz;
+                    }
+                }
+                walk(0, size, 0);
+                return dims;
+            } finally { f2.closeSync(fd); }
+        }
+        const mp4Dims = fileDims;
             const f2 = require('fs');
             const fd = f2.openSync(p, 'r');
             try {
@@ -188,8 +250,8 @@
                 r.clips.forEach((cl) => {
                     try {
                         if (!cl.path) { errs.push(cl.name + ': sin ruta de media'); return finishCheck(); }
-                        const dims = mp4Dims(cl.path);
-                        if (!dims) { errs.push(cl.name + ': no es MP4/MOV legible'); return finishCheck(); }
+                        const dims = fileDims(cl.path);
+                        if (!dims) { errs.push(cl.name + ': formato sin dimensiones (soporto MP4/MOV/PNG/JPG/GIF/BMP)'); return finishCheck(); }
                         const s = (mode === 'height') ? (r.H / dims.h) * 100 : (r.W / dims.w) * 100;
                         const sc = Math.max(1, Math.min(20000, Math.round(s * 100) / 100));
                         cs.evalScript('SP_applyScaleToPath(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
