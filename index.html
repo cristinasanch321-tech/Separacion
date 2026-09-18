@@ -17,8 +17,8 @@
     .seg { display: flex; gap: 2px; }
     .seg button { flex: 1; border: none; background: #1a1b1d; color: #8a8b90; font-size: 9px; padding: 4px 2px; border-radius: 4px; cursor: pointer; font-weight: 600; }
     .seg button.on { background: #3a3b40; color: #fff; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 2px; margin-top: 2px; }
-    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 5px; height: 17px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+    .grid { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 2px; }
+    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 5px; height: 17px; width: 25%; min-width: 18px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
     .big:hover { background: var(--btn-bg-hover); }
     .big.disabled { opacity: .4; pointer-events: none; }
     .big .icon { font-size: 10px; line-height: 1; color: #bbb; }
