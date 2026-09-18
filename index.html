@@ -5,52 +5,47 @@
 <title>Separación</title>
 <style>
     :root { --panel-bg: #1e1e20; --btn-bg: #2a2b2e; --btn-bg-hover: #33343a; --btn-border: #3a3b3e; }
-    body { font-family: system-ui, -apple-system, sans-serif; background: var(--panel-bg); color: #eee; padding: 4px; margin: 0; }
-    .titlebar { display: flex; align-items: center; gap: 4px; cursor: pointer; padding: 1px 3px; border-radius: 4px; user-select: none; position: relative; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--panel-bg); color: #eee; padding: 3px; margin: 0; }
+    .titlebar { display: flex; justify-content: center; cursor: pointer; padding: 2px 0; border-radius: 5px; user-select: none; position: relative; }
     .titlebar:hover { background: var(--btn-bg); }
-    .tname { font-size: 11px; font-weight: 600; color: #ccc; }
-    .dots { color: #888; font-size: 10px; }
-    .pop { position: absolute; top: 20px; left: 0; width: 220px; background: #232427; border: 1px solid #444; border-radius: 10px; padding: 8px 10px; box-shadow: 0 6px 22px rgba(0,0,0,.55); display: none; z-index: 50; }
+    .dots { color: #999; font-size: 14px; line-height: 1; }
+    .pop { position: absolute; top: 22px; left: 3px; right: 3px; background: #232427; border: 1px solid #444; border-radius: 10px; padding: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.6); display: none; z-index: 50; }
     .pop.open { display: block; }
-    .pop h4 { margin: 0 0 6px; text-align: center; font-size: 11px; color: #eee; }
-    .srow { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 5px 0; }
-    .slbl { font-size: 10px; color: #bbb; }
-    .seg { display: flex; background: #1a1b1d; border-radius: 6px; padding: 2px; gap: 2px; }
-    .seg button { border: none; background: transparent; color: #8a8b90; font-size: 9px; padding: 3px 7px; border-radius: 4px; cursor: pointer; font-weight: 600; }
+    .pop h4 { margin: 0 0 6px; text-align: center; font-size: 10px; color: #eee; }
+    .srow { padding: 5px 0; border-top: 1px solid #2e2f33; }
+    .slbl { display: block; font-size: 9px; color: #aaa; margin-bottom: 4px; }
+    .seg { display: flex; gap: 2px; }
+    .seg button { flex: 1; border: none; background: #1a1b1d; color: #8a8b90; font-size: 9px; padding: 4px 2px; border-radius: 4px; cursor: pointer; font-weight: 600; }
     .seg button.on { background: #3a3b40; color: #fff; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 4px; }
-    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 8px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; margin-top: 3px; }
+    .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 7px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
     .big:hover { background: var(--btn-bg-hover); }
     .big.disabled { opacity: .4; pointer-events: none; }
-    .big .icon { font-size: 16px; color: #bbb; }
-    #status { margin-top: 4px; font-size: 8px; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 60px; overflow-y: auto; }
+    .big .icon { font-size: 14px; color: #bbb; }
+    #status { margin-top: 3px; font-size: 8px; line-height: 1.25; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 48px; overflow-y: auto; }
     #status.ok { color: #7ed957; } #status.err { color: #ff6b6b; }
 </style>
 </head>
 <body>
     <div class="titlebar" id="titlebar">
-        <span class="tname">Separación</span>
         <span class="dots">⋮</span>
         <div class="pop" id="settingsPop">
             <h4>Settings</h4>
             <div class="srow">
-                <span class="slbl">Track layout</span>
+                <span class="slbl">Track layout (reunir)</span>
                 <div class="seg" data-key="layout">
                     <button data-v="squashed" class="on">Squashed</button>
                     <button data-v="perdevice">Per device</button>
                 </div>
             </div>
-            <div class="srow">
-                <span class="slbl" style="color:#77787c; font-size:9px;">Squashed: apila y recorta al solape común (listo p/ multicam). Per device: cada clip vuelve a su pista.</span>
-            </div>
         </div>
     </div>
 
     <div class="grid">
-        <div class="big" id="btnSpread" title="Separar: un clip por pista (vídeo+audio)"><div class="icon">⏫</div></div>
-        <div class="big" id="btnRestck" title="Re-apilar en cascada"><div class="icon">⏬</div></div>
-        <div class="big" id="btnFitH" title="Escalar selección para que la ALTURA llene el fotograma (proporcional)"><div class="icon">⬜</div></div>
-        <div class="big" id="btnFitW" title="Escalar selección para que la ANCHURA llene el fotograma (proporcional)"><div class="icon">▭</div></div>
+        <div class="big" id="btnSpread" title="Separar selección (vídeo+audio)"><div class="icon">⏫</div></div>
+        <div class="big" id="btnRestck" title="Reunir selección en cascada"><div class="icon">⏬</div></div>
+        <div class="big" id="btnFitH" title="Llenar ALTURA del fotograma (proporcional)"><div class="icon">⬜</div></div>
+        <div class="big" id="btnFitW" title="Llenar ANCHURA del fotograma (proporcional)"><div class="icon">▭</div></div>
     </div>
     <div id="status">...</div>
 
@@ -77,8 +72,8 @@
         function setStatus(txt, cls) { statusEl.className = cls || ''; statusEl.innerText = txt || ''; }
         function setBusy(b) {
             busy = b;
-            document.getElementById('btnSpread').classList.toggle('disabled', b);
-            document.getElementById('btnRestck').classList.toggle('disabled', b);
+            ['btnSpread','btnRestck','btnFitH','btnFitW'].forEach(id =>
+                document.getElementById(id).classList.toggle('disabled', b));
         }
 
         const pop = document.getElementById('settingsPop');
@@ -105,8 +100,8 @@
         cs.evalScript('SP_ping()', (res) => {
             try {
                 const r = JSON.parse(res);
-                setStatus(r.ok ? `"${r.seq}" · ${r.videoTracks}V/${r.audioTracks}A` : `Premiere: ${r.error}`);
-            } catch (e) { setStatus('JSX no cargado. Reinicia Premiere.', 'err'); }
+                setStatus(r.ok ? `"${r.seq}"` : `${r.error}`);
+            } catch (e) { setStatus('JSX no cargado', 'err'); }
         });
 
         document.getElementById('btnSpread').addEventListener('click', () => {
@@ -117,44 +112,41 @@
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
                 setBusy(false);
                 if (r && r.ok) {
-                    let m = `✔ ${r.spread} vídeo / ${r.audio} audio en pistas propias`;
-                    if (r.addedTracks) m += ` · ${r.addedTracks} pistas creadas`;
-                    m += '\nAhora: Cmd+A → Clip > Synchronize → Audio.\nCuando acabe, pulsa ⏬';
+                    let m = `✔ ${r.spread}V/${r.audio}A en pistas`;
+                    if (r.addedTracks) m += ` (+${r.addedTracks} pistas)`;
+                    m += '\nCmd+A → Clip > Synchronize → Audio\nLuego ⏬';
                     setStatus(m, 'ok');
-                } else setStatus('Spread falló:\n' + (r ? r.errors.join('\n') : res), 'err');
+                } else setStatus('Fallo:\n' + (r ? r.errors.join('\n') : res), 'err');
+            });
+        });
+
+        document.getElementById('btnRestck').addEventListener('click', () => {
+            if (busy) return;
+            setBusy(true);
+            setStatus('Reuniendo (' + SETTINGS.layout + ')...');
+            cs.evalScript('SP_restack(' + JSON.stringify(JSON.stringify({ layout: SETTINGS.layout })) + ')', (res) => {
+                let r = null; try { r = JSON.parse(res); } catch (e) {}
+                setBusy(false);
+                if (r && r.ok) {
+                    let m = `✔ ${r.stacked}V/${r.audio}A apilados`;
+                    if (r.trimmed) m += ' · recorte al solape';
+                    setStatus(m, 'ok');
+                } else setStatus('Fallo:\n' + (r ? r.errors.join('\n') : res), 'err');
             });
         });
 
         function runFit(mode) {
             if (busy) return;
             setBusy(true);
-            setStatus(mode === 'height' ? 'Ajustando altura de la selección...' : 'Ajustando anchura de la selección...');
             cs.evalScript('SP_fitSelection(' + JSON.stringify(JSON.stringify({ mode: mode })) + ')', (res) => {
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
                 setBusy(false);
-                if (r && r.ok && r.scaled > 0) setStatus('✔ ' + r.scaled + ' clip(s) escalados (proporcional, sin deformar).', 'ok');
-                else setStatus('No escalado:
-' + (r ? r.errors.join('\n') : res), 'err');
+                if (r && r.ok && r.scaled > 0) setStatus('✔ ' + r.scaled + ' escalado(s) proporcional.', 'ok');
+                else setStatus('No escalado:\n' + (r ? r.errors.join('\n') : res), 'err');
             });
         }
         document.getElementById('btnFitH').addEventListener('click', () => runFit('height'));
         document.getElementById('btnFitW').addEventListener('click', () => runFit('width'));
-
-        document.getElementById('btnRestck').addEventListener('click', () => {
-            if (busy) return;
-            setBusy(true);
-            setStatus('Reuniendo selección (' + SETTINGS.layout + ')...');
-            cs.evalScript('SP_restack(' + JSON.stringify(JSON.stringify({ layout: SETTINGS.layout })) + ')', (res) => {
-                let r = null; try { r = JSON.parse(res); } catch (e) {}
-                setBusy(false);
-                if (r && r.ok) {
-                    let m = `✔ ${r.stacked} vídeo / ${r.audio} audio apilados`;
-                    if (r.trimmed) m += ' · recortados al solape común';
-                    if (r.addedTracks) m += ` · ${r.addedTracks} pistas creadas`;
-                    setStatus(m, 'ok');
-                } else setStatus('Re-stack falló:\n' + (r ? r.errors.join('\n') : res), 'err');
-            });
-        });
     </script>
 </body>
 </html>
