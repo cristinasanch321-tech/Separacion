@@ -18,7 +18,7 @@
     .seg { display: flex; background: #1a1b1d; border-radius: 6px; padding: 2px; gap: 2px; }
     .seg button { border: none; background: transparent; color: #8a8b90; font-size: 9px; padding: 3px 7px; border-radius: 4px; cursor: pointer; font-weight: 600; }
     .seg button.on { background: #3a3b40; color: #fff; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin-top: 4px; }
+    .grid { display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 4px; }
     .big { background: var(--btn-bg); border: 1px solid var(--btn-border); border-radius: 8px; height: 34px; display: flex; align-items: center; justify-content: center; cursor: pointer; user-select: none; }
     .big:hover { background: var(--btn-bg-hover); }
     .big.disabled { opacity: .4; pointer-events: none; }
@@ -49,6 +49,8 @@
     <div class="grid">
         <div class="big" id="btnSpread" title="Separar: un clip por pista (vídeo+audio)"><div class="icon">⏫</div></div>
         <div class="big" id="btnRestck" title="Re-apilar en cascada"><div class="icon">⏬</div></div>
+        <div class="big" id="btnFitH" title="Escalar selección para que la ALTURA llene el fotograma (proporcional)"><div class="icon">⬜</div></div>
+        <div class="big" id="btnFitW" title="Escalar selección para que la ANCHURA llene el fotograma (proporcional)"><div class="icon">▭</div></div>
     </div>
     <div id="status">...</div>
 
@@ -122,6 +124,21 @@
                 } else setStatus('Spread falló:\n' + (r ? r.errors.join('\n') : res), 'err');
             });
         });
+
+        function runFit(mode) {
+            if (busy) return;
+            setBusy(true);
+            setStatus(mode === 'height' ? 'Ajustando altura de la selección...' : 'Ajustando anchura de la selección...');
+            cs.evalScript('SP_fitSelection(' + JSON.stringify(JSON.stringify({ mode: mode })) + ')', (res) => {
+                let r = null; try { r = JSON.parse(res); } catch (e) {}
+                setBusy(false);
+                if (r && r.ok && r.scaled > 0) setStatus('✔ ' + r.scaled + ' clip(s) escalados (proporcional, sin deformar).', 'ok');
+                else setStatus('No escalado:
+' + (r ? r.errors.join('\n') : res), 'err');
+            });
+        }
+        document.getElementById('btnFitH').addEventListener('click', () => runFit('height'));
+        document.getElementById('btnFitW').addEventListener('click', () => runFit('width'));
 
         document.getElementById('btnRestck').addEventListener('click', () => {
             if (busy) return;
