@@ -12,7 +12,7 @@
     .pop { position: absolute; top: 22px; left: 3px; right: 3px; background: #232427; border: 1px solid #444; border-radius: 10px; padding: 8px; box-shadow: 0 6px 22px rgba(0,0,0,.6); display: none; z-index: 50; }
     .pop.open { display: block; }
     .pop h4 { margin: 0 0 6px; text-align: center; font-size: 10px; color: #eee; }
-    .srow { padding: 5px 0; border-top: 1px solid #2e2f33; }
+    .srow { padding: 5px 0; }
     .slbl { display: block; font-size: 9px; color: #aaa; margin-bottom: 4px; }
     .seg { display: flex; gap: 2px; }
     .seg button { flex: 1; border: none; background: #1a1b1d; color: #8a8b90; font-size: 9px; padding: 4px 2px; border-radius: 4px; cursor: pointer; font-weight: 600; }
@@ -22,7 +22,7 @@
     .big:hover { background: var(--btn-bg-hover); }
     .big.disabled { opacity: .4; pointer-events: none; }
     .big .icon { font-size: 10px; line-height: 1; color: #bbb; }
-    #status { margin-top: 2px; font-size: 8px; line-height: 1.2; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 32px; overflow-y: auto; }
+    #status { margin-top: 2px; font-size: 8px; line-height: 1.2; color: #9aa; white-space: pre-wrap; word-break: break-word; max-height: 40px; overflow-y: auto; }
     #status.ok { color: #7ed957; } #status.err { color: #ff6b6b; }
 </style>
 </head>
@@ -42,10 +42,10 @@
     </div>
 
     <div class="grid">
-        <div class="big" id="btnSpread" title="Separar selección (vídeo+audio)"><div class="icon">⏫</div></div>
-        <div class="big" id="btnRestck" title="Reunir selección en cascada"><div class="icon">⏬</div></div>
-        <div class="big" id="btnFitH" title="Llenar ALTURA del fotograma (proporcional)"><div class="icon">⬜</div></div>
-        <div class="big" id="btnFitW" title="Llenar ANCHURA del fotograma (proporcional)"><div class="icon">▭</div></div>
+        <div class="big" id="btnSpread" title="Separar selección"><div class="icon">⏫</div></div>
+        <div class="big" id="btnRestck" title="Reunir selección"><div class="icon">⏬</div></div>
+        <div class="big" id="btnFitH" title="Llenar ALTURA (proporcional)"><div class="icon">⬜</div></div>
+        <div class="big" id="btnFitW" title="Llenar ANCHURA (proporcional)"><div class="icon">▭</div></div>
     </div>
     <div id="status">...</div>
 
@@ -101,7 +101,7 @@
             try {
                 const r = JSON.parse(res);
                 setStatus(r.ok ? `"${r.seq}"` : `${r.error}`);
-            } catch (e) { setStatus('JSX no cargado', 'err'); }
+            } catch (e) { setStatus('JSX no cargado — reinicia Premiere', 'err'); }
         });
 
         document.getElementById('btnSpread').addEventListener('click', () => {
@@ -135,48 +135,43 @@
             });
         });
 
-        // dimensiones desde cabecera: MP4/MOV (tkhd), PNG, JPG, GIF, BMP
+        // ======== ESCALADO: dimensiones desde el ARCHIVO (Node) + aplicar por ruta ========
         function fileDims(p) {
-            const f2 = require('fs');
-            const fd = f2.openSync(p, 'r');
+            const fs2 = require('fs');
+            const fd = fs2.openSync(p, 'r');
             try {
                 const hb = Buffer.alloc(64);
-                f2.readSync(fd, hb, 0, 64, 0);
-                // PNG
+                fs2.readSync(fd, hb, 0, 64, 0);
                 if (hb[0] === 0x89 && hb.toString('ascii', 1, 4) === 'PNG')
                     return { w: hb.readUInt32BE(16), h: hb.readUInt32BE(20) };
-                // GIF
                 if (hb.toString('ascii', 0, 3) === 'GIF')
                     return { w: hb.readUInt16LE(6), h: hb.readUInt16LE(8) };
-                // BMP
                 if (hb[0] === 0x42 && hb[1] === 0x4D)
                     return { w: hb.readInt32LE(18), h: Math.abs(hb.readInt32LE(22)) };
-                // JPG (busca marcador SOFn)
                 if (hb[0] === 0xFF && hb[1] === 0xD8) {
-                    let pos = 2, buf;
-                    for (let guard = 0; guard < 64; guard++) {
-                        if (f2.readSync(fd, hb, 0, 4, pos) < 4) break;
+                    let pos = 2;
+                    for (let g = 0; g < 64; g++) {
+                        if (fs2.readSync(fd, hb, 0, 4, pos) < 4) break;
                         if (hb[0] !== 0xFF) break;
                         const marker = hb[1], len = hb.readUInt16BE(2);
                         if ((marker >= 0xC0 && marker <= 0xC3) || (marker >= 0xC5 && marker <= 0xC7) ||
                             (marker >= 0xC9 && marker <= 0xCB) || (marker >= 0xCD && marker <= 0xCF)) {
-                            buf = Buffer.alloc(len);
-                            f2.readSync(fd, buf, 0, len, pos);
+                            const buf = Buffer.alloc(len);
+                            fs2.readSync(fd, buf, 0, len, pos);
                             return { h: buf.readUInt16BE(5), w: buf.readUInt16BE(7) };
                         }
                         pos += 2 + len;
                     }
                     return null;
                 }
-                // MP4/MOV: box tkhd
-                const size = f2.fstatSync(fd).size;
+                const size = fs2.fstatSync(fd).size;
                 let dims = null;
                 const CONT = { moov: 1, trak: 1, mdia: 1, minf: 1, stbl: 1, edts: 1 };
                 function walk(pos, end, depth) {
                     if (dims || depth > 6) return;
                     let q = pos;
                     while (q + 8 <= end && !dims) {
-                        if (f2.readSync(fd, hb, 0, 16, q) < 8) return;
+                        if (fs2.readSync(fd, hb, 0, 16, q) < 8) return;
                         let sz = hb.readUInt32BE(0);
                         const ty = hb.toString('ascii', 4, 8);
                         let hdr = 8;
@@ -184,7 +179,7 @@
                         if (sz < hdr) return;
                         if (ty === 'tkhd') {
                             const tail = Buffer.alloc(8);
-                            f2.readSync(fd, tail, 0, 8, q + sz - 8);
+                            fs2.readSync(fd, tail, 0, 8, q + sz - 8);
                             const w = tail.readUInt32BE(0) / 65536;
                             const h = tail.readUInt32BE(4) / 65536;
                             if (w > 0 && h > 0) dims = { w: Math.round(w), h: Math.round(h) };
@@ -196,78 +191,46 @@
                 }
                 walk(0, size, 0);
                 return dims;
-            } finally { f2.closeSync(fd); }
-        }
-        const mp4Dims = fileDims;
-            const f2 = require('fs');
-            const fd = f2.openSync(p, 'r');
-            try {
-                const size = f2.fstatSync(fd).size;
-                let dims = null;
-                const CONT = { moov: 1, trak: 1, mdia: 1, minf: 1, stbl: 1, edts: 1 };
-                const hb = Buffer.alloc(16);
-                function walk(pos, end, depth) {
-                    if (dims || depth > 6) return;
-                    let q = pos;
-                    while (q + 8 <= end && !dims) {
-                        if (f2.readSync(fd, hb, 0, 16, q) < 8) return;
-                        let sz = hb.readUInt32BE(0);
-                        const ty = hb.toString('ascii', 4, 8);
-                        let hdr = 8;
-                        if (sz === 1) { sz = Number(hb.readBigUInt64BE(8)); hdr = 16; }
-                        if (sz < hdr) return;
-                        if (ty === 'tkhd') {
-                            const tail = Buffer.alloc(8);
-                            f2.readSync(fd, tail, 0, 8, q + sz - 8);
-                            const w = tail.readUInt32BE(0) / 65536;
-                            const h = tail.readUInt32BE(4) / 65536;
-                            if (w > 0 && h > 0) dims = { w: Math.round(w), h: Math.round(h) };
-                            return;
-                        }
-                        if (CONT[ty]) walk(q + hdr, Math.min(q + sz, end), depth + 1);
-                        q += sz;
-                    }
-                }
-                walk(0, size, 0);
-                return dims;
-            } finally { f2.closeSync(fd); }
+            } finally { fs2.closeSync(fd); }
         }
 
         function runFit(mode) {
             if (busy) return;
             setBusy(true);
-            setStatus('Leyendo selección y archivo...');
+            setStatus('Leyendo selección...');
             cs.evalScript('SP_getSelMedia()', (res) => {
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
                 if (!r || !r.ok) { setStatus('Error: ' + (r ? r.error : res), 'err'); setBusy(false); return; }
                 if (!r.clips.length) { setStatus('No hay clips seleccionados.', 'err'); setBusy(false); return; }
-                const dbg = r.clips.map(c => c.name.slice(0, 20) + ' · escala actual ' + c.scale).join('\n');
-                setStatus('Clips:\n' + dbg + '\nAplicando...');
-                let done = 0; const errs = [];
+                const info = r.clips.map(c => c.name.slice(0, 16) + ' esc:' + c.scale).join(' | ');
+                setStatus(info + '\nCalculando...');
+                let done = 0; const msgs = [];
                 const finish = () => {
                     setBusy(false);
-                    if (done) setStatus('✔ ' + done + ' escalado(s), proporcional.' + (errs.length ? '\n' + errs.join('\n') : ''), errs.length ? 'err' : 'ok');
-                    else setStatus('No escalado:\n' + errs.join('\n'), 'err');
+                    const oks = msgs.filter(m => m.startsWith('✓'));
+                    const bads = msgs.filter(m => !m.startsWith('✓'));
+                    setStatus(oks.join('\n') + (bads.length ? '\n' + bads.join('\n') : ''), bads.length ? 'err' : 'ok');
                 };
                 r.clips.forEach((cl) => {
                     try {
-                        if (!cl.path) { errs.push(cl.name + ': sin ruta de media'); return finishCheck(); }
+                        if (!cl.path) { msgs.push(cl.name + ': sin ruta de media'); return fin1(); }
                         const dims = fileDims(cl.path);
-                        if (!dims) { errs.push(cl.name + ': formato sin dimensiones (soporto MP4/MOV/PNG/JPG/GIF/BMP)'); return finishCheck(); }
-                        // escala ABSOLUTA deseada (% sobre el tamano nativo del media)
-                        const wantAbs = (mode === 'height') ? (r.H / dims.h) * 100 : (r.W / dims.w) * 100;
-                        // escala ACTUAL reportada por Premiere (puede incluir el auto-fit al insertar)
-                        const curScale = cl.scale || 100;
-                        // desvio relativo: cuanto hay que multiplicar lo ACTUAL para llegar al objetivo
-                        const sc = Math.max(1, Math.min(20000, Math.round(curScale * wantAbs / 100 * 100) / 100));
-                        cs.evalScript('SP_applyScaleToPath(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
+                        if (!dims) { msgs.push(cl.name + ': formato sin dimensiones'); return fin1(); }
+                        // ESCALA ABSOLUTA sobre el media nativo (inmune a auto-fit previo de Premiere)
+                        const sc = Math.max(1, Math.min(20000,
+                            Math.round(((mode === 'height') ? (r.H / dims.h) * 100 : (r.W / dims.w) * 100) * 100) / 100));
+                        cs.evalScript('SP_applyScaleToPath2(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
                             let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
-                            if (r2 && r2.ok) done++;
-                            else errs.push(cl.name + ': fallo al aplicar (' + (r2 && r2.errors ? r2.errors.join('; ') : 'fallo') + ')');
-                            finishCheck();
+                            if (r2 && r2.ok) {
+                                done++;
+                                msgs.push('✓ ' + cl.name.slice(0, 14) + ': ' + (r2.report || []).join(' · '));
+                            } else {
+                                msgs.push(cl.name.slice(0, 14) + ': ' + (r2 && r2.errors ? r2.errors.join('; ') : 'fallo ' + res2));
+                            }
+                            fin1();
                         });
-                    } catch (e) { errs.push(cl.name + ': ' + e.message); finishCheck(); }
-                    function finishCheck() { if (done + errs.length >= r.clips.length) finish(); }
+                    } catch (e) { msgs.push(cl.name + ': ' + e.message); fin1(); }
+                    function fin1() { if (done + msgs.length >= r.clips.length) finish(); }
                 });
             });
         }
