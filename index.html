@@ -219,11 +219,11 @@
                         // ESCALA ABSOLUTA sobre el media nativo (inmune a auto-fit previo de Premiere)
                         const sc = Math.max(1, Math.min(20000,
                             Math.round(((mode === 'height') ? (r.H / dims.h) * 100 : (r.W / dims.w) * 100) * 100) / 100));
-                        cs.evalScript('SP_applyScaleToPath2(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
+                        cs.evalScript('SP_setScaleReal(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
                             let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
                             if (r2 && r2.ok) {
                                 done++;
-                                msgs.push('✓ ' + cl.name.slice(0, 14) + ': ' + (r2.report || []).join(' · '));
+                                msgs.push('✓ ' + (r2.report || []).join(' · '));
                             } else {
                                 msgs.push(cl.name.slice(0, 14) + ': ' + (r2 && r2.errors ? r2.errors.join('; ') : 'fallo ' + res2));
                             }
