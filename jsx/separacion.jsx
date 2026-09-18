@@ -471,3 +471,71 @@ function SP_applyScaleToPath(mp, scale) {
         return J(res);
     } catch (e) { res.error = e.toString(); return J(res); }
 }
+
+/* ---- v3.10: aplicar escala con verificacion de lectura y reintentos ---- */
+function SP_applyScaleToPath2(mp, scale) {
+    var res = { ok: false, applied: 0, report: [], errors: [] };
+    try {
+        var seq = app.project ? app.project.activeSequence : null;
+        if (!seq) { res.error = "No hay secuencia activa"; return J(res); }
+        for (var t = 0; t < seq.videoTracks.numTracks; t++) {
+            var tr = seq.videoTracks[t];
+            for (var c = 0; c < tr.clips.numItems; c++) {
+                var cl = tr.clips[c];
+                var sel = false;
+                try { sel = cl.isSelected(); } catch (eS) {}
+                if (!sel) continue;
+                var cmp = "";
+                try { cmp = cl.projectItem.getMediaPath(); } catch (eP) {}
+                if (cmp !== mp) continue;
+
+                var comps = null;
+                try { comps = cl.components; } catch (eC) {}
+                if (!comps || !comps.numItems) { res.errors.push(cl.name + ": sin componentes"); continue; }
+
+                var applied = false, before = "", after = "";
+                for (var ci = 0; ci < comps.numItems && !applied; ci++) {
+                    var comp = comps[ci];
+                    var props = comp.properties;
+                    var names = [];
+                    var uni = null, ph = null, pw = null;
+                    for (var pi = 0; pi < props.numItems; pi++) {
+                        var nm = String(props[pi].displayName);
+                        names.push(nm);
+                        var lo = nm.toLowerCase();
+                        if (lo === "scale" || lo === "escala") uni = props[pi];
+                        if (lo.indexOf("scale height") >= 0 || lo.indexOf("altura de escala") >= 0) ph = props[pi];
+                        if (lo.indexOf("scale width") >= 0 || lo.indexOf("anchura de escala") >= 0) pw = props[pi];
+                    }
+                    try {
+                        if (uni) {
+                            before = String(uni.getValue());
+                            uni.setValue(Number(scale), true);
+                            after = String(uni.getValue());
+                            applied = true;
+                        } else if (ph && pw) {
+                            before = String(ph.getValue()) + "x" + String(pw.getValue());
+                            ph.setValue(Number(scale), true);
+                            pw.setValue(Number(scale), true);
+                            after = String(ph.getValue()) + "x" + String(pw.getValue());
+                            applied = true;
+                        } else if (props.numItems > 1) {
+                            before = String(props[1].getValue());
+                            props[1].setValue(Number(scale), true);
+                            after = String(props[1].getValue());
+                            applied = true;
+                        }
+                    } catch (eV) { res.errors.push(cl.name + ": " + eV); }
+                }
+                if (applied) {
+                    res.applied++;
+                    res.report.push(cl.name + ": " + before + " -> " + after + " (objetivo " + scale + ")");
+                } else {
+                    res.errors.push(cl.name + ": componentes=[" + names.join(" | ") + "]");
+                }
+            }
+        }
+        res.ok = res.applied > 0;
+        return J(res);
+    } catch (e) { res.error = e.toString(); return J(res); }
+}

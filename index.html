@@ -241,6 +241,8 @@
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
                 if (!r || !r.ok) { setStatus('Error: ' + (r ? r.error : res), 'err'); setBusy(false); return; }
                 if (!r.clips.length) { setStatus('No hay clips seleccionados.', 'err'); setBusy(false); return; }
+                const dbg = r.clips.map(c => c.name.slice(0, 20) + ' · escala actual ' + c.scale).join('\n');
+                setStatus('Clips:\n' + dbg + '\nAplicando...');
                 let done = 0; const errs = [];
                 const finish = () => {
                     setBusy(false);
@@ -261,7 +263,7 @@
                         cs.evalScript('SP_applyScaleToPath(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
                             let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
                             if (r2 && r2.ok) done++;
-                            else errs.push(cl.name + ': ' + (r2 && r2.errors ? r2.errors.join('; ') : 'fallo'));
+                            else errs.push(cl.name + ': fallo al aplicar (' + (r2 && r2.errors ? r2.errors.join('; ') : 'fallo') + ')');
                             finishCheck();
                         });
                     } catch (e) { errs.push(cl.name + ': ' + e.message); finishCheck(); }
