@@ -307,3 +307,78 @@ function SP_restack(optsJson) {
         return J(res);
     } catch (e) { res.errors.push("FATAL: " + e.toString() + " (linea " + e.line + ")"); return J(res); }
 }
+
+/* ---- v3.3: escala proporcional (XMP dims + Motion>Scale por nombre) ---- */
+function SP_fitSelection(mode) {
+    var res = { ok: false, scaled: 0, errors: [] };
+    function err(m) { res.errors.push(String(m)); }
+    try {
+        var seq = app.project ? app.project.activeSequence : null;
+        if (!seq) { err("No hay secuencia activa"); return J(res); }
+        var W = 0, H = 0;
+        try { W = seq.frameSizeHorizontal; H = seq.frameSizeVertical; } catch (eF) {}
+        if (!W || !H) { err("No pude leer el tamano de fotograma de la secuencia"); return J(res); }
+
+        var t, c;
+        for (t = 0; t < seq.videoTracks.numTracks; t++) {
+            var tr = seq.videoTracks[t];
+            for (c = 0; c < tr.clips.numItems; c++) {
+                var cl = tr.clips[c];
+                var sel = false;
+                try { sel = cl.isSelected(); } catch (eS) {}
+                if (!sel) continue;
+                var it = null;
+                try { it = cl.projectItem; } catch (ePI) {}
+                if (!it) { err(cl.name + ": sin projectItem"); continue; }
+
+                var mw = 0, mh = 0, xmp = "";
+                try { xmp = it.getProjectMetadata(); } catch (eX) { xmp = ""; }
+                if (xmp) {
+                    var m1 = xmp.match(/stDim:w>(\d+)</), m2 = xmp.match(/stDim:h>(\d+)</);
+                    if (m1 && m2) { mw = parseInt(m1[1], 10); mh = parseInt(m2[1], 10); }
+                    if (!mw) { m1 = xmp.match(/FrameSizeHorizontal>(\d+)</); m2 = xmp.match(/FrameSizeVertical>(\d+)</);
+                               if (m1 && m2) { mw = parseInt(m1[1], 10); mh = parseInt(m2[1], 10); } }
+                }
+                if (!mw || !mh) {
+                    try {
+                        var fi = it.getFootageInterpretation();
+                        if (fi && fi.frameSizeHorizontal) { mw = fi.frameSizeHorizontal; mh = fi.frameSizeVertical; }
+                    } catch (eFI) {}
+                }
+                if (!mw || !mh) { err(cl.name + ": sin dimensiones del media"); continue; }
+
+                var newScale = (mode === "height") ? (H / mh) * 100 : (W / mw) * 100;
+                if (newScale < 1) newScale = 1;
+                if (newScale > 20000) newScale = 20000;
+
+                var applied = false;
+                var comps = null;
+                try { comps = cl.components; } catch (eC) { comps = null; }
+                if (!comps) { err(cl.name + ": sin componentes (Motion)"); continue; }
+                for (var ci = 0; ci < comps.numItems && !applied; ci++) {
+                    var comp = comps[ci];
+                    var dn = String(comp.displayName).toLowerCase();
+                    if (dn.indexOf("motion") < 0 && dn.indexOf("movimiento") < 0) continue;
+                    var props = comp.properties;
+                    var uni = null, ph = null, pw = null;
+                    for (var pi = 0; pi < props.numItems; pi++) {
+                        var nm = String(props[pi].displayName).toLowerCase();
+                        if (nm === "scale" || nm === "escala") uni = props[pi];
+                        if (nm.indexOf("scale height") >= 0 || nm.indexOf("altura de escala") >= 0) ph = props[pi];
+                        if (nm.indexOf("scale width") >= 0 || nm.indexOf("anchura de escala") >= 0 || nm.indexOf("ancho de escala") >= 0) pw = props[pi];
+                    }
+                    try {
+                        if (uni) { uni.setValue(newScale, true); applied = true; }
+                        else if (ph && pw) { ph.setValue(newScale, true); pw.setValue(newScale, true); applied = true; }
+                        else if (props.numItems > 1) { props[1].setValue(newScale, true); applied = true; }
+                    } catch (eV) { err(cl.name + ": " + eV); }
+                }
+                if (applied) res.scaled++;
+                else err(cl.name + ": no encontre Motion > Scale");
+            }
+        }
+        res.ok = res.scaled > 0 || res.errors.length === 0;
+        if (!res.scaled && !res.errors.length) err("No hay clips de video seleccionados");
+        return J(res);
+    } catch (e) { res.errors.push("FATAL: " + e.toString() + " (linea " + e.line + ")"); return J(res); }
+}
