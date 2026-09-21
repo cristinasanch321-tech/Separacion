@@ -384,6 +384,40 @@ function SP_fitSelection(mode) {
 }
 
 /* ---- v3.5: escala con dimensiones leidas del ARCHIVO (por el panel via Node) ---- */
+/* media path con expansion de Combinados/Multicam:
+   si getMediaPath() da vacio, busca el primer sub-item con media real */
+function mpDeep(item) {
+    try {
+        var p = item.getMediaPath();
+        if (p) return p;
+    } catch (e1) {}
+    try {
+        var n = item.children.numItems;
+        for (var i = 0; i < n; i++) {
+            var ch = item.children[i];
+            var p2 = "";
+            try { p2 = ch.getMediaPath(); } catch (e2) {}
+            if (p2) return p2;
+            if (item.children && ch.children && ch.children.numItems) {
+                var p3 = mpDeep(ch);
+                if (p3) return p3;
+            }
+        }
+    } catch (e3) {}
+    try {
+        var mc = item.getVideoCodecType ? null : null;
+    } catch (e4) {}
+    // via ProjectMetadata para multicams
+    try {
+        var xmp = item.getProjectMetadata();
+        if (xmp) {
+            var m = xmp.match(/FilePath>([^<]+)</);
+            if (m && m[1]) return m[1];
+        }
+    } catch (e5) {}
+    return "";
+}
+
 function findScaleProp(comp) {
     var props = comp.properties;
     var uni = null, ph = null, pw = null;
@@ -412,7 +446,7 @@ function SP_getSelMedia() {
                 try { sel = cl.isSelected(); } catch (eS) {}
                 if (!sel) continue;
                 var path = "", name = "clip", scale = 100;
-                try { path = cl.projectItem.getMediaPath(); } catch (eP) {}
+                try { path = mpDeep(cl.projectItem); } catch (eP) {}
                 try { name = cl.name; } catch (eN) {}
                 var comps = null;
                 try { comps = cl.components; } catch (eC) {}
@@ -448,8 +482,8 @@ function SP_applyScaleToPath(mp, scale) {
                 try { sel = cl.isSelected(); } catch (eS) {}
                 if (!sel) continue;
                 var cmp = "";
-                try { cmp = cl.projectItem.getMediaPath(); } catch (eP) {}
-                if (cmp !== mp) continue;
+                try { cmp = mpDeep(cl.projectItem); } catch (eP) {}
+                if (cmp !== mp && cmp.split("/").pop() !== mp.split("/").pop()) continue;
                 var comps = null;
                 try { comps = cl.components; } catch (eC) {}
                 if (!comps) { res.errors.push(cl.name + ": sin Motion"); continue; }
@@ -533,6 +567,112 @@ function SP_applyScaleToPath2(mp, scale) {
                 } else {
                     res.errors.push(cl.name + ": componentes=[" + names.join(" | ") + "]");
                 }
+            }
+        }
+        res.ok = res.applied > 0;
+        return J(res);
+    } catch (e) { res.error = e.toString(); return J(res); }
+}
+
+/* ---- v3.12: escala REAL — reconstruye el clip si tiene auto-scale (Set to Frame Size) ---- */
+function SP_setScaleReal(mp, scale) {
+    var res = { ok: false, applied: 0, rebuilt: 0, report: [], errors: [] };
+    function err(m) { res.errors.push(String(m)); }
+    try {
+        var seq = app.project ? app.project.activeSequence : null;
+        if (!seq) { err("No hay secuencia activa"); return J(res); }
+        var zero = getZeroSec(seq);
+        var t, c;
+        for (t = seq.videoTracks.numTracks - 1; t >= 0; t--) {
+            var tr = seq.videoTracks[t];
+            for (c = tr.clips.numItems - 1; c >= 0; c--) {
+                var cl = tr.clips[c];
+                var sel = false;
+                try { sel = cl.isSelected(); } catch (eS) {}
+                if (!sel) continue;
+                var cmp = "";
+                try { cmp = cl.projectItem.getMediaPath(); } catch (eP) {}
+                if (cmp !== mp) continue;
+
+                var it = cl.projectItem;
+                var inS = cl.inPoint.seconds, outS = cl.outPoint.seconds;
+                var st = cl.start.seconds, en = cl.end.seconds;
+                var clName = cl.name;
+
+                // detectar escala actual de Motion
+                var curScale = 100;
+                try {
+                    var comps0 = cl.components;
+                    for (var ci0 = 0; ci0 < comps0.numItems; ci0++) {
+                        var dn0 = String(comps0[ci0].displayName).toLowerCase();
+                        if (dn0.indexOf("motion") < 0 && dn0.indexOf("movimiento") < 0) continue;
+                        var sp0 = findScaleProp(comps0[ci0]);
+                        if (sp0.uni) curScale = Number(sp0.uni.getValue());
+                        else if (sp0.ph) curScale = Number(sp0.ph.getValue());
+                        break;
+                    }
+                } catch (eR0) {}
+
+                // hipotesis: si curScale < 40 y el media es mas grande que el frame,
+                // probablemente hay auto-scale/Set-to-Frame: reconstruimos sin el
+                var needsRebuild = (curScale < 40);
+                res.report.push(clName + ": curScale=" + curScale + (needsRebuild ? " [rebuild]" : " [directo]"));
+
+                if (!needsRebuild) {
+                    // directo: setValue y listo
+                    var comps = null;
+                    try { comps = cl.components; } catch (eC) {}
+                    var applied = false;
+                    for (var ci = 0; ci < comps.numItems && !applied; ci++) {
+                        var dn = String(comps[ci].displayName).toLowerCase();
+                        if (dn.indexOf("motion") < 0 && dn.indexOf("movimiento") < 0) continue;
+                        var sp = findScaleProp(comps[ci]);
+                        try {
+                            if (sp.uni) { sp.uni.setValue(Number(scale), true); applied = true; }
+                            else if (sp.ph && sp.pw) { sp.ph.setValue(Number(scale), true); sp.pw.setValue(Number(scale), true); applied = true; }
+                        } catch (eV) { err(clName + ": " + eV); }
+                    }
+                    if (applied) { res.applied++; res.report.push("  -> escala " + scale + " aplicada"); }
+                    else err(clName + ": no encontre Motion>Scale");
+                    continue;
+                }
+
+                // REBUILD: quitar y reinsertar SIN auto-escala + Motion.Scale absoluto
+                try { cl.remove(false, false); } catch (eRm) { err("rebuild-quitar: " + eRm); continue; }
+                try {
+                    it.setInPoint(inS, 4);
+                    it.setOutPoint(outS, 4);
+                    seq.videoTracks[t].overwriteClip(it, st);
+                    try { it.clearInPoint(4); } catch (e1) {}
+                    try { it.clearOutPoint(4); } catch (e2) {}
+                    res.rebuilt++;
+                    // localizar el clip recien insertado y aplicar escala
+                    var nv = seq.videoTracks[t];
+                    var applied2 = false;
+                    for (var c2 = 0; c2 < nv.clips.numItems; c2++) {
+                        var nc = nv.clips[c2];
+                        if (Math.abs(nc.start.seconds - st) < 0.02 && mpOf(nc) === mp) {
+                            var comps2 = null;
+                            try { comps2 = nc.components; } catch (eC2) {}
+                            if (comps2) {
+                                for (var ci2 = 0; ci2 < comps2.numItems && !applied2; ci2++) {
+                                    var dn2 = String(comps2[ci2].displayName).toLowerCase();
+                                    if (dn2.indexOf("motion") < 0 && dn2.indexOf("movimiento") < 0) continue;
+                                    var sp2 = findScaleProp(comps2[ci2]);
+                                    try {
+                                        if (sp2.uni) { sp2.uni.setValue(Number(scale), true); applied2 = true; }
+                                        else if (sp2.ph && sp2.pw) { sp2.ph.setValue(Number(scale), true); sp2.pw.setValue(Number(scale), true); applied2 = true; }
+                                    } catch (eV2) { err(clName + " reb: " + eV2); }
+                                }
+                            }
+                            // re-seleccionar para operaciones encadenadas
+                            try { nc.setSelected(true, true); } catch (eSel) {}
+                            break;
+                        }
+                    }
+                    if (applied2) { res.applied++; res.report.push("  -> reconstruido + escala " + scale); }
+                    else err(clName + ": reconstruido pero Motion no aplicado");
+                } catch (eIns) { err("rebuild-insertar: " + eIns); }
             }
         }
         res.ok = res.applied > 0;
