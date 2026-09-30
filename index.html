@@ -49,6 +49,14 @@
     </div>
     <div id="status">...</div>
 
+    <div class="card" id="dimsCard" style="display:none; border-color:#f5a623;">
+        <label id="dimsLabel">Dimensiones del media</label>
+        <div class="row2">
+            <div><input type="text" id="dimsInput" placeholder="3840x2160"></div>
+            <div><button class="sec" id="dimsOk" style="margin-top:0;">OK</button></div>
+        </div>
+    </div>
+
     <script src="./js/CSInterface.js"></script>
     <script>
         const cs = new CSInterface();
@@ -202,35 +210,43 @@
                 let r = null; try { r = JSON.parse(res); } catch (e) {}
                 if (!r || !r.ok) { setStatus('Error: ' + (r ? r.error : res), 'err'); setBusy(false); return; }
                 if (!r.clips.length) { setStatus('No hay clips seleccionados.', 'err'); setBusy(false); return; }
-                const info = r.clips.map(c => c.name.slice(0, 16) + ' esc:' + c.scale).join(' | ');
-                setStatus(info + '\nCalculando...');
                 let done = 0; const msgs = [];
                 const finish = () => {
                     setBusy(false);
-                    const oks = msgs.filter(m => m.startsWith('✓'));
-                    const bads = msgs.filter(m => !m.startsWith('✓'));
+                    const oks = msgs.filter(m => m.startsWith('OK '));
+                    const bads = msgs.filter(m => !m.startsWith('OK '));
                     setStatus(oks.join('\n') + (bads.length ? '\n' + bads.join('\n') : ''), bads.length ? 'err' : 'ok');
                 };
+                const fin1 = (msg) => { if (msg) msgs.push(msg); if (done + msgs.length >= r.clips.length) finish(); };
                 r.clips.forEach((cl) => {
                     try {
-                        if (!cl.path) { msgs.push(cl.name + ': sin ruta de media'); return fin1(); }
-                        const dims = fileDims(cl.path);
-                        if (!dims) { msgs.push(cl.name + ': formato sin dimensiones'); return fin1(); }
-                        // ESCALA ABSOLUTA sobre el media nativo (inmune a auto-fit previo de Premiere)
+                        let dims = null;
+                        if (cl.path) dims = fileDims(cl.path);
+                        if (!dims) {
+                            // Combinado/Multicam o formato ilegible: pedir dimensiones con prompt
+                            const saved = (() => { try { return localStorage.getItem('sep_dims_' + cl.name); } catch (e) { return null; } })();
+                            if (saved) { dims = JSON.parse(saved); }
+                            else {
+                                const txt = prompt('"' + cl.name + '"\nDimensiones del media (ej: 3840x2160):', '3840x2160');
+                                if (!txt) { fin1(cl.name + ': cancelado'); return; }
+                                const m2 = txt.trim().match(/^(\d+)\s*[xX×]\s*(\d+)$/);
+                                if (!m2) { fin1(cl.name + ': usa formato 3840x2160'); return; }
+                                dims = { w: parseInt(m2[1], 10), h: parseInt(m2[2], 10) };
+                                try { localStorage.setItem('sep_dims_' + cl.name, JSON.stringify(dims)); } catch (e3) {}
+                            }
+                        }
                         const sc = Math.max(1, Math.min(20000,
                             Math.round(((mode === 'height') ? (r.H / dims.h) * 100 : (r.W / dims.w) * 100) * 100) / 100));
-                        cs.evalScript('SP_setScaleReal(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
+                        cs.evalScript('SP_applyScaleToPath2(' + JSON.stringify(cl.path) + ',' + sc + ')', (res2) => {
                             let r2 = null; try { r2 = JSON.parse(res2); } catch (e) {}
                             if (r2 && r2.ok) {
                                 done++;
-                                msgs.push('✓ ' + (r2.report || []).join(' · '));
+                                fin1('OK ' + cl.name.slice(0, 14) + ': ' + (r2.report || []).join(' · '));
                             } else {
-                                msgs.push(cl.name.slice(0, 14) + ': ' + (r2 && r2.errors ? r2.errors.join('; ') : 'fallo ' + res2));
+                                fin1(cl.name.slice(0, 14) + ': ' + (r2 && r2.errors ? r2.errors.join('; ') : 'fallo ' + res2));
                             }
-                            fin1();
                         });
-                    } catch (e) { msgs.push(cl.name + ': ' + e.message); fin1(); }
-                    function fin1() { if (done + msgs.length >= r.clips.length) finish(); }
+                    } catch (e) { fin1(cl.name + ': ' + e.message); }
                 });
             });
         }
